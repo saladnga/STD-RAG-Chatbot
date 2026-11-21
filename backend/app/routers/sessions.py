@@ -70,7 +70,10 @@ def _update_session_title_sync(session_id: str, user_id: str, title: str):
         .execute()
     )
     if getattr(result, "error", None):
-        raise HTTPException(status_code=500, detail=str(result.error))
+        logger.error("Rename session failed: %s", result.error)
+        raise HTTPException(
+            status_code=500, detail="Something went wrong. Please try again."
+        )
 
 
 @router.put("/sessions/{session_id}/title")
@@ -121,4 +124,6 @@ async def delete_session(session_id: str, authorization: str = Header(...)):
         raise
     except Exception:
         logger.exception("Delete session failed")
-        raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+        raise HTTPException(
+            status_code=500, detail="Something went wrong. Please try again."
+        )

@@ -27,7 +27,9 @@ ADMIN_EMAILS = {
 security = HTTPBearer(auto_error=False)  # Don't auto-raise error, handle manually
 
 
-def require_admin_auth(allow_unauthenticated: bool, allowed_emails: Optional[set] = None):
+def require_admin_auth(
+    allow_unauthenticated: bool, allowed_emails: Optional[set] = None
+):
     """
     Dependency factory for admin-only endpoints (training, document upload):
     requires a valid Bearer token, unless the given dev-mode flag allows
@@ -40,7 +42,9 @@ def require_admin_auth(allow_unauthenticated: bool, allowed_emails: Optional[set
         credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     ) -> Dict:
         if allow_unauthenticated:
-            logger.warning("Admin endpoint accessible without authentication (dev mode)")
+            logger.warning(
+                "Admin endpoint accessible without authentication (dev mode)"
+            )
             return {"id": "dev_user", "role": "admin"}
 
         if not credentials:
@@ -61,3 +65,6 @@ def require_admin_auth(allow_unauthenticated: bool, allowed_emails: Optional[set
         return user
 
     return verify
+
+
+require_user = require_admin_auth(allow_unauthenticated=False)  # any logged-in user

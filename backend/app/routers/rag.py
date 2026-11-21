@@ -14,7 +14,8 @@ import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rag.ingest_pdf import ingest_pdf
 from rag.retriever import retrieve_and_answer
-from auth_utils import ALLOW_UNAUTHENTICATED_RAG_UPLOAD, ADMIN_EMAILS, require_admin_auth
+from auth_utils import ALLOW_UNAUTHENTICATED_RAG_UPLOAD, ADMIN_EMAILS, require_admin_auth, require_user
+from rate_limiter import enforce
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ async def upload_pdf(
 
 
 @router.post("/ask", response_model=QuestionResponse)
-async def ask_question(request: QuestionRequest):
+async def ask_question(request: QuestionRequest, user: Dict = Depends(require_user)):
     """
     Ask a question using RAG (Retrieval-Augmented Generation).
     
@@ -199,6 +200,7 @@ async def ask_question(request: QuestionRequest):
     The answer is guaranteed to be based only on the provided context.
     If the context doesn't contain enough information, the answer will explicitly state this.
     """
+    enforce("10/minute", "rag_ask", user["id"])
     if not request.question or not request.question.strip():
         raise HTTPException(
             status_code=400,

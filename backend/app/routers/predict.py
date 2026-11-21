@@ -10,7 +10,9 @@ import sys
 import os
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from auth_utils import require_user
+from rate_limiter import enforce
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 
@@ -36,6 +38,7 @@ except ImportError:
 
     def get_feature_columns(*args, **kwargs):
         return []
+
 
 from services.prediction_logic import (
     TOP_K,
@@ -91,7 +94,7 @@ def _require_model():
 
 
 @router.post("")
-async def predict(request: SymptomRequest):
+async def predict(request: SymptomRequest, user: Dict = Depends(require_user)):
     """
     Accepts a text description of symptoms and returns:
     - Calibrated probabilities for all classes
@@ -100,6 +103,7 @@ async def predict(request: SymptomRequest):
     - Next question if confidence is below threshold
     - Detected symptoms
     """
+    enforce("20/minute", "predict", user["id"])
     model, label_encoder, feature_columns = _require_model()
 
     feature_dict = process_text_to_feature(request.text, feature_columns)
@@ -145,7 +149,7 @@ async def predict(request: SymptomRequest):
 
 
 @router.post("/followup")
-async def followup(request: FollowupRequest):
+async def followup(request: FollowupRequest, user: Dict = Depends(require_user)):
     """
     Processes follow-up answer (yes/no or free text) to previous question.
     Updates features based on answer and returns:
@@ -154,6 +158,7 @@ async def followup(request: FollowupRequest):
     - Confidence score
     - Next question if still not confident
     """
+    enforce("20/minute", "predict", user["id"])
     model, label_encoder, feature_columns = _require_model()
 
     # Reconstruct question metadata from question_id if available
@@ -170,8 +175,8 @@ async def followup(request: FollowupRequest):
             if pred1 in QUESTION_BANK and pred2 in QUESTION_BANK[pred1]:
                 questions = QUESTION_BANK[pred1][pred2]
                 if questions:
-                    question_metadata["feature_target"] = (
-                        map_question_text_to_feature(questions[0])
+                    question_metadata["feature_target"] = map_question_text_to_feature(
+                        questions[0]
                     )
 
     updated_features = update_features_from_answer(
