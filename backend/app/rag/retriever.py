@@ -5,7 +5,7 @@ Retriever for RAG with vector retrieval, optional cross-encoder reranking, and s
 import os
 import sys
 from typing import List, Dict, Tuple, Optional
-from llm_clients import sync_client
+from llm_clients import sync_client, DEFAULT_CHAT_MODEL
 from dotenv import load_dotenv
 import logging
 
@@ -249,7 +249,7 @@ def generate_answer(
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=DEFAULT_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
