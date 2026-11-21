@@ -10,9 +10,6 @@ from db import verify_user_token
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-ALLOW_UNAUTHENTICATED_TRAIN = (
-    os.getenv("ALLOW_UNAUTHENTICATED_TRAIN", "false").lower() == "true"
-)
 ALLOW_UNAUTHENTICATED_RAG_UPLOAD = (
     os.getenv("ALLOW_UNAUTHENTICATED_RAG_UPLOAD", "false").lower() == "true"
 )
@@ -31,7 +28,7 @@ def require_admin_auth(
     allow_unauthenticated: bool, allowed_emails: Optional[set] = None
 ):
     """
-    Dependency factory for admin-only endpoints (training, document upload):
+    Dependency factory for admin-only endpoints (document upload):
     requires a valid Bearer token, unless the given dev-mode flag allows
     bypassing it locally, optionally narrowed to a specific email allowlist.
     Shared so every caller gets the same (correctly awaited) token check,
