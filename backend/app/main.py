@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import routers
-from routers import predict, train, rag, auth, chat, sessions
+from routers import predict, rag, auth, chat, sessions
 from model import load_model
 
 
@@ -47,8 +47,8 @@ async def lifespan(app: FastAPI):
         logger.info("Model loaded successfully")
     except Exception as e:
         logger.warning(f"Could not load model: {e}")
-        logger.warning("Some endpoints may not work until model is trained.")
-        logger.warning("Train the model using: POST /train")
+        logger.warning("Prediction is unavailable until model.joblib exists.")
+        logger.warning("Train it offline: cd backend/app && python model.py")
         # Set None values to prevent AttributeError
         app.state.model = None
         app.state.nlp = None
@@ -75,7 +75,7 @@ app = FastAPI(
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]  # slowapi's handler is narrower than Starlette's type; safe at runtime
 
 # Add CORS middleware
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
@@ -91,7 +91,6 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router)
 app.include_router(predict.router)
-app.include_router(train.router)
 app.include_router(rag.router)
 app.include_router(chat.router)
 app.include_router(sessions.router)
@@ -107,8 +106,6 @@ async def root():
         "endpoints": {
             "predict": "/predict",
             "followup": "/predict/followup",
-            "train": "/train (protected)",
-            "train_status": "/train/status (protected)",
             "rag_upload": "/rag/upload",
             "rag_ask": "/rag/ask",
             "rag_stats": "/rag/stats",

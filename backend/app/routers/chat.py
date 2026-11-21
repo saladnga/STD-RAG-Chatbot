@@ -2,7 +2,6 @@
 The live chat WebSocket endpoint. Orchestrates: auth, session load/create, streaming a GPT reply (RAG-grounded when relevant), and - when the model signals it has enough information - running the ML prediction and a second, diagnosis-specific reply. The actual logic for each step lives in services/chat_analysis.py; session/message persistence lives in db.py.
 """
 
-import json
 import os
 import re
 import logging
@@ -12,6 +11,7 @@ from dotenv import load_dotenv
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Query
 import asyncio
 import limits
+from llm_clients import async_client
 from rate_limiter import limiter
 
 from db import (
@@ -36,7 +36,7 @@ from services.chat_analysis import (
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = async_client(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Keyed by session_id while a WebSocket is open - in-memory, single-process only
 active_connections = {}
@@ -50,6 +50,12 @@ CHAT_RATE_LIMIT = limits.parse("20/minute")
 DEFAULT_MODEL = "gpt-4o-mini"
 
 KEEPALIVE_INTERVAL_S = 15  # well under typical reverse-proxy idle timeouts
+
+
+async def _send_notice(websocket: WebSocket, text: str):
+    """Send a short message that is a complete reply on its own. The browser only ends a reply bubble on __DONE__, so skipping it glues the next reply onto this one."""
+    await websocket.send_text(text)
+    await websocket.send_text("__DONE__")
 
 
 @asynccontextmanager
@@ -107,9 +113,7 @@ async def _process_user_message(
 
     # First try to get RAG context for the user's question
     message_content = user_input.strip()
-    rag_context, rag_sources_for_chat = await get_rag_context_for_chat(
-        message_content
-    )
+    rag_context, rag_sources_for_chat = await get_rag_context_for_chat(message_content)
 
     # Add system context if we have RAG information
     enhanced_messages = messages["messages"].copy()
@@ -210,11 +214,13 @@ async def _process_user_message(
                 "Analysis will be triggered - skipping regular response display"
             )
 
-    except Exception as e:
-        error_msg = f"Error: {str(e)}"
-        await websocket.send_text(error_msg)
-        ai_response = error_msg
-        analysis_will_trigger = False  # No analysis on error
+    except Exception:
+        logger.exception("Chat reply failed")
+        await websocket.send_text(
+            "Sorry, something went wrong on our side. Please try again."
+        )
+        await websocket.send_text("__DONE__")
+        return
 
     # Use the analysis check we did earlier
     analysis_triggered = analysis_will_trigger
@@ -227,8 +233,9 @@ async def _process_user_message(
     if analysis_triggered:
         # Check if model is available
         if not model or not label_encoder:
-            await websocket.send_text(
-                "\n\n **Analysis Error**: The ML model is not available. Please contact support or try again later.\n"
+            await _send_notice(
+                websocket,
+                "Symptom analysis is unavailable right now. Please try again later.",
             )
             return
 
@@ -243,14 +250,10 @@ async def _process_user_message(
             # Fallback: load from feature specification
             feature_columns = load_feature_spec() or []
             if not feature_columns:
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "role": "assistant",
-                            "content": "Warning: Model features not available. Please ensure the model is trained.",
-                            "type": "error",
-                        }
-                    )
+                logger.error("Model feature columns missing; cannot run analysis")
+                await _send_notice(
+                    websocket,
+                    "Symptom analysis is unavailable right now. Please try again later.",
                 )
                 return
 
@@ -322,7 +325,9 @@ async def _process_user_message(
         await websocket.send_text("__DONE__")
 
         # Save AI reply with sources
-        await save_message(current_session_id, user_id, "assistant", final_response, token)
+        await save_message(
+            current_session_id, user_id, "assistant", final_response, token
+        )
         messages["messages"].append({"role": "assistant", "content": final_response})
     else:
         # Regular response (not analysis) - append to messages only (message already saved above if no analysis was triggered)
@@ -335,9 +340,7 @@ async def _process_user_message(
 
 @router.websocket("/chat")
 async def health_chat(
-    websocket: WebSocket,
-    token: str = Query(...),
-    session_id: str = Query(None)
+    websocket: WebSocket, token: str = Query(...), session_id: str = Query(None)
 ):
     """
     Real-time interactive chatbot with persistent storage.
@@ -358,6 +361,8 @@ async def health_chat(
 
     user = await verify_user_token(token)
     if not user:
+        # Accept first: closing before accept becomes an HTTP 403, and the browser then sees code 1006, never 4001.
+        await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
@@ -366,7 +371,7 @@ async def health_chat(
     # Decided once per connection, not per message - a user's key/model choice doesn't change mid-conversation.
     user_openai_key, user_openai_model = await get_user_openai_settings(user_id)
     if user_openai_key:
-        chat_client = AsyncOpenAI(api_key=user_openai_key)
+        chat_client = async_client(user_openai_key)
         # Guards against a stale/invalid stored value (e.g. the allowed list changed after this was saved) rather than trusting the DB blindly.
         chat_model = (
             user_openai_model
@@ -383,15 +388,18 @@ async def health_chat(
         # Use the session_id from query parameter if provided, otherwise create new
         session = await get_or_create_session(user_id, session_id, token)
         current_session_id = session["id"]
+        chat_history = await load_chat_history(current_session_id)
 
         # The client has no way to know a brand-new session's id otherwise - without this, refreshing a "new chat" spawns a second, orphaned session.
         await websocket.send_text(f"__SESSION__:{current_session_id}")
     except Exception as e:
-        await websocket.send_text(f"Error loading session: {str(e)}")
+        logger.exception("Could not load chat session")
+        await websocket.send_text(
+            "Could not load this chat. Please refresh and try again."
+        )
+        await websocket.send_text("__DONE__")
         await websocket.close()
         return
-
-    chat_history = await load_chat_history(current_session_id)
 
     # Get user profile for personalized interactions
     user_profile = None
@@ -441,32 +449,44 @@ async def health_chat(
             user_input = await websocket.receive_text()
 
             if len(user_input) > MAX_MESSAGE_LENGTH:
-                await websocket.send_text(
-                    f"Message too long ({len(user_input)} characters). Please keep it under {MAX_MESSAGE_LENGTH} characters."
+                await _send_notice(
+                    websocket,
+                    f"Message too long ({len(user_input)} characters). Please keep it under {MAX_MESSAGE_LENGTH} characters.",
                 )
                 continue
 
             if not limiter.limiter.hit(CHAT_RATE_LIMIT, user_id):
-                await websocket.send_text("You are sending messages too fast. Please wait a moment.")
+                await _send_notice(
+                    websocket, "You are sending messages too fast. Please wait a moment."
+                )
                 continue
 
-            async with _keepalive(websocket):
-                await _process_user_message(
-                    websocket,
-                    user_input,
-                    current_session_id,
-                    user_id,
-                    token,
-                    messages,
-                    model,
-                    label_encoder,
-                    chat_client,
-                    chat_model,
+            try:
+                async with _keepalive(websocket):
+                    await _process_user_message(
+                        websocket,
+                        user_input,
+                        current_session_id,
+                        user_id,
+                        token,
+                        messages,
+                        model,
+                        label_encoder,
+                        chat_client,
+                        chat_model,
+                    )
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                # Anything _process_user_message didn't handle itself (e.g. the analysis path).
+                # One safe reply, and the socket stays open for the next message.
+                logger.exception("Chat message failed")
+                await _send_notice(
+                    websocket, "Sorry, something went wrong on our side. Please try again."
                 )
 
     except WebSocketDisconnect:
-        # Clean up session on disconnect
-        # Use the current_session_id we created for this connection
-        if current_session_id in active_connections:
-            del active_connections[current_session_id]
-        # Don't call websocket.close() here - it's already closed and causes AttributeError
+        pass  # normal: the user closed the tab or lost connection
+    finally:
+        # Runs on every exit, including crashes, so a dead chat is never left in memory.
+        active_connections.pop(current_session_id, None)

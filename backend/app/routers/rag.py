@@ -14,7 +14,8 @@ import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rag.ingest_pdf import ingest_pdf
 from rag.retriever import retrieve_and_answer
-from auth_utils import ALLOW_UNAUTHENTICATED_RAG_UPLOAD, ADMIN_EMAILS, require_admin_auth
+from auth_utils import ALLOW_UNAUTHENTICATED_RAG_UPLOAD, ADMIN_EMAILS, require_admin_auth, require_user
+from rate_limiter import enforce
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -171,8 +172,8 @@ async def upload_pdf(
             status_code=500,
             detail="PDF processing library not available. Please install PyPDF2 or pypdf: pip install PyPDF2"
         )
-    except Exception as e:
-        logger.error(f"Error processing PDF: {e}", exc_info=True)
+    except Exception:
+        logger.exception("PDF ingestion failed")
         # Clean up file if ingestion failed
         if os.path.exists(file_path):
             try:
@@ -181,12 +182,12 @@ async def upload_pdf(
                 pass
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing PDF: {str(e)}"
+            detail="Could not process this PDF."
         )
 
 
 @router.post("/ask", response_model=QuestionResponse)
-async def ask_question(request: QuestionRequest):
+async def ask_question(request: QuestionRequest, user: Dict = Depends(require_user)):
     """
     Ask a question using RAG (Retrieval-Augmented Generation).
     
@@ -199,6 +200,7 @@ async def ask_question(request: QuestionRequest):
     The answer is guaranteed to be based only on the provided context.
     If the context doesn't contain enough information, the answer will explicitly state this.
     """
+    enforce("10/minute", "rag_ask", user["id"])
     if not request.question or not request.question.strip():
         raise HTTPException(
             status_code=400,
@@ -254,11 +256,11 @@ async def ask_question(request: QuestionRequest):
             num_chunks_retrieved=len(sources)
         )
         
-    except Exception as e:
-        logger.error(f"Error processing question: {e}", exc_info=True)
+    except Exception:
+        logger.exception("RAG question failed")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing question: {str(e)}"
+            detail="Could not answer right now. Please try again."
         )
 
 
@@ -280,9 +282,9 @@ async def get_rag_stats():
             "sources": sources
         }
     
-    except Exception as e:
-        logger.error(f"Error getting RAG stat: {e}")
+    except Exception:
+        logger.exception("RAG stats failed")
         raise HTTPException(
             status_code=500,
-            detail=f"Error getting RAG statistics: {str(e)}"
+            detail="Could not load statistics."
         )

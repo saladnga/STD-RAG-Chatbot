@@ -82,9 +82,6 @@ pip install fastapi uvicorn
 **Solution:** Train the model first:
 
 ```bash
-# Using the API
-curl -X POST http://localhost:8000/train
-
 # Or directly
 cd backend/app
 python -c "from model import train_model; train_model()"
@@ -102,7 +99,6 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8001
 
 1. **Train the model** (if not already trained):
 
-   - POST to `/train` endpoint
    - Or run `python model.py` directly
 
 2. **Test predictions**:

@@ -5,7 +5,7 @@ Retriever for RAG with vector retrieval, optional cross-encoder reranking, and s
 import os
 import sys
 from typing import List, Dict, Tuple, Optional
-from openai import OpenAI
+from llm_clients import sync_client
 from dotenv import load_dotenv
 import logging
 
@@ -27,7 +27,7 @@ from rag.templates import (
 from supabase_client import get_supabase_client
 
 # Initialize OpenAI client
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = sync_client(os.getenv("OPENAI_API_KEY"))
 
 # Initialize Supabase (pgvector)
 supabase = get_supabase_client()

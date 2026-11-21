@@ -1,0 +1,4 @@
+# Tools for tests and checks only - not installed in the production image.
+-r requirements.txt
+pytest==9.1.1
+basedpyright==1.40.2

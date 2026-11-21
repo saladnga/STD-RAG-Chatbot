@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { API_URL, apiFetch } from "../lib/api";
-import { getToken, getUser } from "../lib/storage";
+import { clearAuth, getToken, getUser } from "../lib/storage";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -128,8 +128,14 @@ export function useChatSocket({
     ws.onerror = () => setIsConnected(false);
 
     let cancelled = false;
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setIsConnected(false);
+      if (event.code === 4001) {
+        // Login expired or invalid: retrying with the same token can never work.
+        clearAuth();
+        window.location.href = "/login";
+        return;
+      }
       if (!cancelled) {
         // Exponential backoff, capped at 30s: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
         // Resets to 1s once a connection actually succeeds (see onopen).

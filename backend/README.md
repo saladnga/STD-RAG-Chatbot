@@ -9,7 +9,6 @@ backend/app/
 ├── routers/
 │   ├── __init__.py
 │   ├── predict.py          # /predict, /followup endpoints
-│   ├── train.py            # /train endpoint (protected)
 │   └── rag.py              # /rag/upload, /rag/ask endpoints
 │
 ├── rag/
@@ -93,13 +92,6 @@ backend/app/
     "previous_probabilities": {"Chlamydia": 0.7, "Gonorrhea": 0.2, ...}
   }
   ```
-
-### Training Endpoint
-
-- **POST /train** (Protected)
-  - Triggers model retraining
-  - Requires authentication token
-  - Returns training status and metrics
 
 ### RAG Endpoints
 
@@ -186,6 +178,5 @@ See `requirements.txt` for full list. Key dependencies:
 
 - Model must be trained before using prediction endpoints
 - RAG requires uploaded PDFs before asking questions
-- Authentication required for `/train` endpoint
 - ChromaDB data persists in `data/chroma/`
 
