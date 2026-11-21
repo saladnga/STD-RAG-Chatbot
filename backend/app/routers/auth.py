@@ -5,7 +5,8 @@ from pydantic import BaseModel, EmailStr, field_validator
 from supabase_client import get_supabase_client
 from supabase import create_client
 from supabase_auth.errors import AuthApiError
-from openai import AsyncOpenAI, AuthenticationError
+from openai import AuthenticationError
+from llm_clients import async_client
 import os
 from db import verify_user_token, get_user_openai_settings
 from typing import Optional
@@ -415,7 +416,7 @@ async def set_openai_key(body: OpenAIKeyRequest, authorization: str = Header(...
         # Validate before storing - a bad/revoked key should fail loudly
         # here, not confusingly mid-conversation later.
         try:
-            await AsyncOpenAI(api_key=submitted_key).models.list()
+            await async_client(submitted_key, timeout=10.0, max_retries=0).models.list()
         except AuthenticationError:
             raise HTTPException(status_code=400, detail="That API key was rejected by OpenAI - double check it.")
         except Exception as e:

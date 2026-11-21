@@ -11,7 +11,7 @@ from typing import List, Dict
 from dotenv import load_dotenv
 import pypdf as PyPDF2
 
-from openai import OpenAI
+from llm_clients import sync_client
 
 load_dotenv()
 
@@ -19,7 +19,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = sync_client(os.getenv("OPENAI_API_KEY"), timeout=120.0)
 
 # PDF text extraction libraries
 try:

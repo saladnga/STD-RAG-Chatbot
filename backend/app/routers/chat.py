@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Query
 import asyncio
 import limits
+from llm_clients import async_client
 from rate_limiter import limiter
 
 from db import (
@@ -36,7 +37,7 @@ from services.chat_analysis import (
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = async_client(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Keyed by session_id while a WebSocket is open - in-memory, single-process only
 active_connections = {}
@@ -366,7 +367,7 @@ async def health_chat(
     # Decided once per connection, not per message - a user's key/model choice doesn't change mid-conversation.
     user_openai_key, user_openai_model = await get_user_openai_settings(user_id)
     if user_openai_key:
-        chat_client = AsyncOpenAI(api_key=user_openai_key)
+        chat_client = async_client(user_openai_key)
         # Guards against a stale/invalid stored value (e.g. the allowed list changed after this was saved) rather than trusting the DB blindly.
         chat_model = (
             user_openai_model
