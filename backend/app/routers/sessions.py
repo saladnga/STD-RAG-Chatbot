@@ -7,6 +7,9 @@ from fastapi import APIRouter, HTTPException, Header
 from db import verify_user_token, load_chat_history, get_user_session
 from supabase_client import get_supabase_client
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ws", tags=["Chat Sessions"])
 
@@ -116,7 +119,6 @@ async def delete_session(session_id: str, authorization: str = Header(...)):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete session: {str(e)}"
-        )
+    except Exception:
+        logger.exception("Delete session failed")
+        raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")

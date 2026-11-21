@@ -171,8 +171,8 @@ async def upload_pdf(
             status_code=500,
             detail="PDF processing library not available. Please install PyPDF2 or pypdf: pip install PyPDF2"
         )
-    except Exception as e:
-        logger.error(f"Error processing PDF: {e}", exc_info=True)
+    except Exception:
+        logger.exception("PDF ingestion failed")
         # Clean up file if ingestion failed
         if os.path.exists(file_path):
             try:
@@ -181,7 +181,7 @@ async def upload_pdf(
                 pass
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing PDF: {str(e)}"
+            detail="Could not process this PDF."
         )
 
 
@@ -254,11 +254,11 @@ async def ask_question(request: QuestionRequest):
             num_chunks_retrieved=len(sources)
         )
         
-    except Exception as e:
-        logger.error(f"Error processing question: {e}", exc_info=True)
+    except Exception:
+        logger.exception("RAG question failed")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing question: {str(e)}"
+            detail="Could not answer right now. Please try again."
         )
 
 
@@ -280,9 +280,9 @@ async def get_rag_stats():
             "sources": sources
         }
     
-    except Exception as e:
-        logger.error(f"Error getting RAG stat: {e}")
+    except Exception:
+        logger.exception("RAG stats failed")
         raise HTTPException(
             status_code=500,
-            detail=f"Error getting RAG statistics: {str(e)}"
+            detail="Could not load statistics."
         )

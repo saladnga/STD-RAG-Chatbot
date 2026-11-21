@@ -210,11 +210,11 @@ async def _process_user_message(
                 "Analysis will be triggered - skipping regular response display"
             )
 
-    except Exception as e:
-        error_msg = f"Error: {str(e)}"
-        await websocket.send_text(error_msg)
-        ai_response = error_msg
-        analysis_will_trigger = False  # No analysis on error
+    except Exception:
+        logger.exception("Chat reply failed")
+        await websocket.send_text("Sorry, something went wrong on our side. Please try again.")
+        await websocket.send_text("__DONE__")
+        return
 
     # Use the analysis check we did earlier
     analysis_triggered = analysis_will_trigger
@@ -387,7 +387,9 @@ async def health_chat(
         # The client has no way to know a brand-new session's id otherwise - without this, refreshing a "new chat" spawns a second, orphaned session.
         await websocket.send_text(f"__SESSION__:{current_session_id}")
     except Exception as e:
-        await websocket.send_text(f"Error loading session: {str(e)}")
+        logger.exception("Could not load chat session")
+        await websocket.send_text("Could not load this chat. Please refresh and try again.")
+        await websocket.send_text("__DONE__")
         await websocket.close()
         return
 

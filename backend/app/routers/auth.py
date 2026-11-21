@@ -156,10 +156,11 @@ async def signup(request: SignupRequest):
     except AuthApiError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Signup failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Server Error: {str(e)}",
+            detail="Something went wrong. Please try again.",
         )
 
 
@@ -223,10 +224,11 @@ async def login(request: Request, login_data: LoginRequest):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Authentication error: {str(e)}",
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Login failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Server error: {str(e)}",
+            detail="Something went wrong. Please try again.",
         )
 
 
@@ -240,10 +242,11 @@ async def logout():
     try:
         await asyncio.to_thread(_logout_sync)
         return {"message": "Logged out successfully"}
-    except Exception as e:
+    except Exception:
+        logger.exception("Logout failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout failed: {str(e)}",
+            detail="Something went wrong. Please try again.",
         )
 
 
