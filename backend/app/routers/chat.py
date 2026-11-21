@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Query
 import asyncio
 import limits
-from llm_clients import async_client
+from llm_clients import async_client, DEFAULT_CHAT_MODEL
 from rate_limiter import limiter
 
 from db import (
@@ -47,7 +47,7 @@ MAX_MESSAGE_LENGTH = 2000  # ~400-500 words
 CHAT_RATE_LIMIT = limits.parse("20/minute")
 
 # No personal key: app's key, cheapest model. Personal key: their key, their chosen model (see auth.py's /openai-key, which owns ALLOWED_CUSTOM_MODELS).
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = DEFAULT_CHAT_MODEL
 
 KEEPALIVE_INTERVAL_S = 15  # well under typical reverse-proxy idle timeouts
 
