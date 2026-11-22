@@ -3,8 +3,8 @@ Score document retrieval against evals/cases/rag.jsonl.
 
     cd backend && python -m evals.run_retrieval
 
-Needs the real OpenAI and Supabase keys in app/.env: it searches the live document
-table. Question embeddings are cached in evals/cache/, so re-runs make no OpenAI calls.
+Needs the real OpenAI key in app/.env and Google credentials (`gcloud auth application-default login`):
+it searches the live Firestore chunks. Question embeddings are cached in evals/cache/, so re-runs make no OpenAI calls.
 
 Scores are at file level for now. Chunks have no page numbers until Phase 3.
 """

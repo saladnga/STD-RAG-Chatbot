@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Concurrency regression test for the shared-Supabase-client race condition.
+Concurrency regression test for the shared-database-client race condition.
 
 Opens N authenticated WebSocket connections at once, each asking about a DIFFERENT real condition simultaneously, and checks every reply for:
   - mentioning the condition it actually asked about (catches cross-talk
@@ -173,7 +173,7 @@ def main():
     print("(fixed this session) lived in.")
     print("=" * 64)
 
-    token = login(args.url)
+    token = login()
     all_clean = asyncio.run(run(ws_url, token))
 
     print("\n" + "=" * 64)

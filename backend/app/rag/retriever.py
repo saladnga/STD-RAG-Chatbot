@@ -56,11 +56,9 @@ try:
     # Initialize cross-encoder model (loaded lazily)
     _cross_encoder_model = None
 except ImportError:
+    # Optional and off by default; rerank_chunks warns if reranking is asked for without it.
     CROSS_ENCODER_AVAILABLE = False
     _cross_encoder_model = None
-    logger.warning(
-        "sentence-transformers not available. Cross-encoder reranking will be disabled."
-    )
 
 
 def get_cross_encoder_model():

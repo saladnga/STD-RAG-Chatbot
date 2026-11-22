@@ -53,7 +53,6 @@ except ImportError:
     )
 
 
-# Initialize Supabase client (pgvector storage)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from google.cloud.firestore_v1.vector import Vector
 from rag.retriever import chunks_collection, firestore_client

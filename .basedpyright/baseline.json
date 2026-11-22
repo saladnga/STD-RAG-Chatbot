@@ -710,24 +710,6 @@
                 }
             }
         ],
-        "./backend/app/supabase_client.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 33,
-                    "endColumn": 45,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 47,
-                    "endColumn": 59,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./backend/test_analysis_citations.py": [
             {
                 "code": "reportArgumentType",

@@ -9,15 +9,22 @@ on:
 jobs:
   evals:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # lets GitHub prove its identity to Google - no key file stored anywhere
     defaults:
       run:
         working-directory: backend
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
     steps:
       - uses: actions/checkout@v4
+      # Retrieval reads the live Firestore chunks, so the job needs Google credentials.
+      # Needs Workload Identity Federation set up in Google Cloud and these two repo secrets.
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
