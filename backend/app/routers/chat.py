@@ -329,7 +329,7 @@ async def health_chat(
     """
     Real-time interactive chatbot with persistent storage.
     Query Parameters:
-    - token: JWT access token from Supabase auth
+    - token: Firebase ID token
     - session_id: (Optional) UUID of existing session to resume
     Workflow:
     1. Authenticate user via token

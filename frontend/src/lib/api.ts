@@ -34,16 +34,17 @@ export async function clearOpenaiKey() {
   return { ok: res.ok, data };
 }
 
-// After Firebase signs someone in: load (GET) or create (PATCH) their profile and keep it for the UI.
-export async function startSession(uid: string, options: RequestInit = {}) {
-  const res = await apiFetch("/auth/profile", options);
+// After Firebase signs someone in: create or update their profile and keep it for the UI.
+// PATCH creates a missing profile, so an account whose signup broke halfway can still log in.
+export async function startSession(uid: string, fields: object) {
+  const res = await apiFetch("/auth/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
   if (!res.ok) {
     clearAuth();
-    throw new Error(
-      res.status === 404
-        ? "No profile found for this account. Please sign up again."
-        : "Couldn't load your profile. Please try again.",
-    );
+    throw new Error("Couldn't load your profile. Please try again.");
   }
   saveSession({ ...(await res.json()), id: uid });
 }

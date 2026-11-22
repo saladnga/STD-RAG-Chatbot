@@ -1,4 +1,4 @@
-"""Login checks accept Firebase tokens, fall back to Supabase, and ignore unverified emails."""
+"""Login checks accept Firebase tokens and ignore unverified emails."""
 
 import asyncio
 from unittest.mock import patch
@@ -30,17 +30,8 @@ def test_unverified_email_is_dropped():
         assert db._verify_user_token("tok") == {"id": "fb-123", "email": None}
 
 
-def test_non_firebase_token_falls_back_to_supabase():
-    with _firebase(error=ValueError("not a Firebase token")), \
-         patch.object(db, "get_supabase_client") as supabase:
-        supabase.return_value.auth.get_user.return_value.user.id = "sb-1"
-        supabase.return_value.auth.get_user.return_value.user.email = "s@b.com"
-        assert db._verify_user_token("tok") == {"id": "sb-1", "email": "s@b.com"}
-
-
-def test_token_rejected_by_both_is_401():
-    with _firebase(error=ValueError("bad")), \
-         patch.object(db, "get_supabase_client", side_effect=Exception("bad")):
+def test_rejected_token_is_401():
+    with _firebase(error=ValueError("bad")):
         r = client.post("/rag/ask", json={"question": "hi"}, headers={"Authorization": "Bearer junk"})
     assert r.status_code == 401
 

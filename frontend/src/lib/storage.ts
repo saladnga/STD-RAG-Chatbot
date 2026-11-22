@@ -43,7 +43,6 @@ export const clearCurrentSessionId = () =>
 
 export const clearAuth = () => {
   void signOut(auth);
-  localStorage.removeItem("access_token"); // left over from Supabase logins
   localStorage.removeItem("user");
   clearCurrentSessionId();
 };

@@ -34,11 +34,7 @@ function Signup() {
     try {
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
       void sendEmailVerification(user); // not required to log in; only admin emails need it
-      await startSession(user.uid, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, first_name: firstName, last_name: lastName }),
-      });
+      await startSession(user.uid, { email, first_name: firstName, last_name: lastName });
       navigate("/chat");
     } catch (err) {
       setError(authErrorMessage(err));

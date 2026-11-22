@@ -10,7 +10,6 @@ query can never reach another user's chats:
 
 from datetime import datetime, timezone
 from functools import cache
-from supabase_client import get_supabase_client
 from typing import Optional, List, Dict
 import asyncio
 
@@ -24,7 +23,9 @@ FIREBASE_PROJECT_ID = "troy-healthlink"
 firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID})
 
 
-def _verify_firebase_token(token: str) -> Optional[Dict]:
+def _verify_user_token(token: str) -> Optional[Dict]:
+    if not token:
+        return None
     try:
         claims = firebase_auth.verify_id_token(token)
     except Exception:
@@ -33,26 +34,6 @@ def _verify_firebase_token(token: str) -> Optional[Dict]:
     # otherwise a stranger could register an ADMIN_EMAILS address and pass the admin check.
     email = claims.get("email") if claims.get("email_verified") else None
     return {"id": claims["uid"], "email": email}
-
-
-def _verify_user_token(token: str) -> Optional[Dict]:
-    if not token:
-        return None
-    # Supabase fallback until every user is on Firebase; delete it with Supabase.
-    user = _verify_firebase_token(token)
-    if user:
-        return user
-    try:
-        supabase = get_supabase_client()
-        # Validates this token directly - must NOT use set_session, which would mutate the shared client's identity for every other request.
-        user_res = supabase.auth.get_user(token)
-
-        if user_res and user_res.user:
-            return {"id": user_res.user.id, "email": user_res.user.email}
-    except Exception as e:
-        print(f"Token verification error: {str(e)}")
-        return None
-    return None
 
 
 async def verify_user_token(token: str) -> Optional[Dict]:

@@ -22,7 +22,7 @@ function Login() {
 
     try {
       const { user } = await signInWithEmailAndPassword(auth, email, password);
-      await startSession(user.uid);
+      await startSession(user.uid, { email: user.email });
       navigate("/chat");
     } catch (err) {
       setError(authErrorMessage(err));
