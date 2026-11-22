@@ -1,242 +1,15 @@
-import re
+# Signup, login and password resets happen in the browser with Firebase; this router only serves the profile.
 import logging
-from fastapi import APIRouter, HTTPException, status, Header, Request
-from pydantic import BaseModel, EmailStr, field_validator
-from supabase_client import get_supabase_client
-from supabase import create_client
-from supabase_auth.errors import AuthApiError
+from fastapi import APIRouter, HTTPException, Header
+from pydantic import BaseModel
 from openai import AuthenticationError
 from llm_clients import async_client
-import os
 from db import verify_user_token, get_user_openai_settings, get_profile as load_profile, save_profile
 from typing import Optional
-import asyncio
-from rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-
-def validate_password_strength(password: str) -> str:
-    if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
-    if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must contain at least one uppercase letter")
-    if not re.search(r"[^A-Za-z0-9]", password):
-        raise ValueError("Password must contain at least one symbol")
-    return password
-
-
-class SignupRequest(BaseModel):
-    email: EmailStr
-    password: str
-    first_name: str
-    last_name: str
-
-    @field_validator("password")
-    @classmethod
-    def check_password_strength(cls, v):
-        return validate_password_strength(v)
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def check_password_strength(cls, v):
-        return validate_password_strength(v)
-
-
-def _signup_sync(request: SignupRequest):
-    auth_client = create_client(
-        os.getenv("VITE_SUPABASE_URL"),
-        os.getenv("VITE_SUPABASE_ANON_KEY"),
-    )
-    auth_res = auth_client.auth.sign_up(
-        {
-            "email": request.email,
-            "password": request.password,
-            "options": {
-                "data": {
-                    "first_name": request.first_name,
-                    "last_name": request.last_name,
-                }
-            },
-        }
-    )
-
-    if auth_res.user is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Signup failed"
-        )
-
-    # Check if session exists (may be None if email confirmation is required)
-    access_token = auth_res.session.access_token if auth_res.session else None
-
-    return {
-        "access_token": access_token,
-        "user": {
-            "id": auth_res.user.id,
-            "email": request.email,
-            "first_name": request.first_name,
-            "last_name": request.last_name,
-        },
-        "message": (
-            "Signup successful. Please check your email to confirm your account."
-            if not access_token
-            else "Signup successful."
-        ),
-    }
-
-
-@router.post("/signup")
-async def signup(request: SignupRequest):
-    try:
-        result = await asyncio.to_thread(_signup_sync, request)
-        await save_profile(
-            result["user"]["id"],
-            {"email": request.email, "first_name": request.first_name, "last_name": request.last_name},
-        )
-        return result
-
-    except HTTPException:
-        raise  # let our own intentional 4xx responses through unchanged
-
-    except AuthApiError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    except Exception:
-        logger.exception("Signup failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Something went wrong. Please try again.",
-        )
-
-
-def _login_sync(request: LoginRequest):
-    # Fresh client, not the shared one - signing in on the shared client makes supabase-py silently swap its Authorization header to this user's own token, breaking every other request using it afterward.
-    auth_client = create_client(
-        os.getenv("VITE_SUPABASE_URL"),
-        os.getenv("VITE_SUPABASE_ANON_KEY"),
-    )
-    auth_res = auth_client.auth.sign_in_with_password(
-        {"email": request.email, "password": request.password}
-    )
-
-    if auth_res.user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
-
-    if auth_res.session is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed. Please verify your email or try again.",
-        )
-
-    return {
-        "access_token": auth_res.session.access_token,
-        "user": {
-            "id": auth_res.user.id,
-        },
-    }
-
-
-@router.post("/login")
-@limiter.limit("5/minute")
-async def login(request: Request, login_data: LoginRequest):
-    try:
-        result = await asyncio.to_thread(_login_sync, login_data)
-        profile = await load_profile(result["user"]["id"])
-        if not profile:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No profile found for this account. Please contact support.",
-            )
-        result["user"].update(email=profile.get("email"), first_name=profile.get("first_name"), last_name=profile.get("last_name"))
-        return result
-
-    except HTTPException:
-        raise  # let our own intentional 4xx responses through unchanged
-
-    except AuthApiError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}",
-        )
-    except Exception:
-        logger.exception("Login failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Something went wrong. Please try again.",
-        )
-
-
-def _logout_sync():
-    supabase = get_supabase_client()
-    supabase.auth.sign_out()
-
-
-@router.post("/logout")
-async def logout():
-    try:
-        await asyncio.to_thread(_logout_sync)
-        return {"message": "Logged out successfully"}
-    except Exception:
-        logger.exception("Logout failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Something went wrong. Please try again.",
-        )
-
-
-def _forgot_password_sync(email: str):
-    supabase = get_supabase_client()
-    frontend_url = os.getenv(
-        "FRONTEND_URL", "http://localhost:5173"
-    )
-    try:
-        supabase.auth.reset_password_for_email(
-            email, {"redirect_to": f"{frontend_url}/reset-password"}
-        )
-    except Exception as e:
-        # Same generic response either way - never leak whether this email exists (prevents account enumeration).
-        logger.warning(f"Password reset email error: {str(e)}")
-
-
-@router.post("/forgot-password")
-@limiter.limit("3/minute")
-async def forgot_password(request: Request, body: ForgotPasswordRequest):
-    await asyncio.to_thread(_forgot_password_sync, body.email)
-    return {
-        "message": "If an account exists for that email, a reset link has been sent"
-    }
-
-
-def _reset_password_sync(user_id: str, new_password: str):
-    supabase = get_supabase_client()
-    supabase.auth.admin.update_user_by_id(user_id, {"password": new_password})
-
-
-@router.post("/reset-password")
-async def reset_password(body: ResetPasswordRequest):
-    user = await verify_user_token(body.token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired reset link")
-    await asyncio.to_thread(_reset_password_sync, user["id"], body.new_password)
-    return {"message": "Password updated successfully. Please log in"}
 
 
 def _strip_openai_key(profile: dict) -> dict:
@@ -267,7 +40,7 @@ async def get_profile(authorization: Optional[str] = Header(None)):
     return _strip_openai_key(profile)
 
 
-# Optional: allow the user to update their profile (PATCH)
+# Also creates the profile - signup calls this right after Firebase makes the account.
 @router.patch("/profile")
 async def update_profile(profile_update: dict, authorization: str = Header(...)):
     """
@@ -285,8 +58,6 @@ async def update_profile(profile_update: dict, authorization: str = Header(...))
     # The key and model have their own validated endpoint below - never settable through this generic passthrough.
     for field in ("openai_api_key", "openai_model", "user_id"):
         profile_update.pop(field, None)
-    if not await load_profile(user["id"]):
-        raise HTTPException(status_code=404, detail="Profile not found")
     await save_profile(user["id"], profile_update)
     return _strip_openai_key(await load_profile(user["id"]) or {})
 

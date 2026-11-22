@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { forgotPassword } from "../lib/api";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth, authErrorMessage } from "../lib/firebase";
 import AuthLayout from "../components/AuthLayout";
 import FormField from "../components/FormField";
 import FormError from "../components/FormError";
@@ -18,14 +19,13 @@ function ForgotPassword() {
     setLoading(true);
 
     try {
-      const { ok, data } = await forgotPassword(email);
-      if (ok) {
-        setSubmitted(true);
-      } else {
-        setError(data.detail || "Something went wrong");
-      }
+      // Firebase emails a link to its own hosted page where the new password is set.
+      await sendPasswordResetEmail(auth, email);
+      setSubmitted(true);
     } catch (err) {
-      setError("Connection error: " + err);
+      // Never reveal whether an account exists for this email.
+      if ((err as { code?: string }).code === "auth/user-not-found") setSubmitted(true);
+      else setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }

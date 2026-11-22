@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { authRequest } from "../lib/api";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { startSession } from "../lib/api";
+import { auth, authErrorMessage } from "../lib/firebase";
 import AuthLayout from "../components/AuthLayout";
 import FormField from "../components/FormField";
 import FormError from "../components/FormError";
@@ -19,19 +21,11 @@ function Login() {
     setLoading(true);
 
     try {
-      const { ok, data } = await authRequest("/auth/login", {
-        email,
-        password,
-      });
-
-      if (ok) {
-        navigate("/chat");
-      } else {
-        setError(data.detail || "Login failed");
-      }
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      await startSession(user.uid);
+      navigate("/chat");
     } catch (err) {
-      setError("Connection error");
-      console.error(err);
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }

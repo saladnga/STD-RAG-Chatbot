@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/api";
 import ProfileField from "../components/ProfileField";
 import OpenAIKeySection from "../components/OpenAIKeySection";
-import { getToken, getUser, saveUser } from "../lib/storage";
+import { getUser, saveUser } from "../lib/storage";
 import { useNotify } from "../lib/notify";
 
 interface User {
@@ -136,9 +136,8 @@ export default function Profile() {
   const [openaiModel, setOpenaiModel] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = getToken();
     const storedUser = getUser();
-    if (!token || !storedUser) {
+    if (!storedUser) {
       navigate("/login");
       return;
     }
@@ -213,7 +212,8 @@ export default function Profile() {
         throw new Error("Failed to update profile");
       }
 
-      const updatedProfile = await response.json();
+      // Merge over the stored user so its id (the backend says user_id) survives the save.
+      const updatedProfile = { ...getUser(), ...(await response.json()) };
       saveUser(updatedProfile);
       setUser(updatedProfile);
       setFormData(updatedProfile);

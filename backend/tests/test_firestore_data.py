@@ -63,3 +63,24 @@ def test_real_firestore_round_trip():
             await db._fs().recursive_delete(db._user(user_id))
 
     asyncio.run(scenario())
+
+
+def test_profile_patch_creates_a_missing_profile(monkeypatch):
+    saved = {}
+
+    async def fake_verify(token):
+        return {"id": "new-user", "email": None}
+
+    async def fake_save(user_id, fields):
+        saved.update(fields)
+
+    async def fake_load(user_id):
+        return {"user_id": user_id, **saved} if saved else None
+
+    monkeypatch.setattr(auth, "verify_user_token", fake_verify)
+    monkeypatch.setattr(auth, "save_profile", fake_save)
+    monkeypatch.setattr(auth, "load_profile", fake_load)
+    r = client.patch("/auth/profile", json={"first_name": "Ava", "user_id": "someone-else"},
+                     headers={"Authorization": "Bearer t"})
+    assert r.status_code == 200
+    assert r.json() == {"user_id": "new-user", "first_name": "Ava", "has_custom_openai_key": False}
