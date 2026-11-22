@@ -1,0 +1,39 @@
+# Runs on every push to dev (Cloud Build trigger). Steps run in order; if one fails, the rest are skipped, so failing tests never reach Cloud Run.
+steps:
+  - id: test
+    name: python:3.12-slim
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        pip install -q --no-cache-dir -r backend/requirements-dev.txt
+        cd backend && python -m pytest tests/ -q
+        cd .. && basedpyright
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: [build, -t, "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/troy-api:$COMMIT_SHA", backend]
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, "$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/troy-api:$COMMIT_SHA"]
+  - id: deploy
+    # Only swaps the image; env vars, secrets and the service account set in the Console stay as they are.
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_NAME
+      - --image=$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/troy-api:$COMMIT_SHA
+      - --region=$_DEPLOY_REGION
+      - --quiet
+
+substitutions:
+  _AR_HOSTNAME: us-central1-docker.pkg.dev
+  _AR_REPOSITORY: cloud-run-source-deploy
+  _SERVICE_NAME: troy-api-dev
+  _DEPLOY_REGION: us-central1
+
+options:
+  substitutionOption: ALLOW_LOOSE  # the trigger defines extra variables this file doesn't use
+  logging: CLOUD_LOGGING_ONLY
