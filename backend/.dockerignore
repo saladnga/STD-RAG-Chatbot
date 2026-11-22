@@ -6,6 +6,8 @@ __pycache__/
 .git
 .gitignore
 *.md
+# ...except the prompts, which the app loads at runtime
+!app/prompts/*.md
 test_rag_integration.py
 app/data/chroma/
 app/data/pdf/

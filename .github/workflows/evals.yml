@@ -1,0 +1,36 @@
+name: LLM evals
+
+# Costs a few cents per run and gives slightly different scores each time, so it is run by
+# hand (Actions tab -> LLM evals -> Run workflow): before a release, and after any change to
+# prompts, models or retrieval. The deterministic triage gate runs on every PR inside CI.
+on:
+  workflow_dispatch:
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Retrieval
+        run: python -m evals.run_retrieval
+      - name: LLM-judged answers and safety
+        run: python -m evals.run_llm
+      - name: Upload scores and answers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: backend/evals/results/
+      - name: Gate against evals/thresholds.json
+        run: python -m evals.gate retrieval rag-llm safety-llm

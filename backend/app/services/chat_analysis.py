@@ -15,16 +15,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from knowledge_base import STD_KNOWLEDGE
 from rag.retriever import retrieve_and_answer
 from model import process_text_to_feature
+from prompts import load as load_prompt
 
 logger = logging.getLogger(__name__)
 
 
 def build_system_prompt(user_profile: Optional[Dict]) -> str:
     """Build the personalized system prompt for a chat session"""
-    base_prompt = """
-    You are Troy HealthBot, a compassionate health assistant specializing in sexual health.
-    You have access to comprehensive medical literature and evidence-based resources.
-    """
+    base_prompt = load_prompt("chat_system")
     # Add user-specific context if available
     if user_profile:
         user_context = f"\n\nUser Context:"
@@ -70,27 +68,15 @@ def build_system_prompt(user_profile: Optional[Dict]) -> str:
 
         base_prompt += user_context
 
-    full_prompt = (
-        base_prompt
-        + """
-        Your approach:
-        1. Greet users warmly by name (if available) and ask about their concerns
-        2. Use appropriate pronouns based on their gender identity
-        3. If symptoms are unclear, ask clarifying questions about:
-        - Discharge (color: white/gray/yellow/green)
-        - Pain/burning location and severity
-        - Unusual odors
-        - Duration of symptoms
-        4. Once you have enough information, say: "Let me analyze your symptoms..."
-        5. Be empathetic, non-judgemental, and medically responsible
-        6. Always encourage professional medical consultation
-        7. Only cite a document using [Source: filename, Chunk: X] when this message's context actually gave you that exact citation - never write this format, or name any specific organization or publication (CDC, WHO, Mayo Clinic, etc.), when you weren't given one
-        8. If answering from general medical knowledge instead, say so explicitly and do not attribute it to any source
-        Important: You gather information through to analyze, signal with "ANALYZE:" prefix.
-        """
-    )
+    full_prompt = base_prompt + load_prompt("chat_rules")
 
     return full_prompt
+
+
+def build_rag_system_message(rag_context: str) -> str:
+    """The system message that tells the chat model to answer from retrieved documents and cite them.
+    Shared by the chat socket and the evals, so the evals test exactly what users get."""
+    return load_prompt("chat_rag_context").format(rag_context=rag_context)
 
 
 async def get_rag_context_for_chat(message_content: str) -> Tuple[str, list]:
@@ -248,19 +234,11 @@ def build_analysis_prompt(
     logger.debug(f"Context Source: {context_source}")
     logger.debug(f"ML Prediction: {prediction_class_name} ({confidence:.1f}%)")
 
-    return f"""
-            Based on the conversation, here are the analysis results:
-            PREDICTION: {primary_info.get('full_name', prediction_class_name)}
-            CONFIDENCE: {confidence:.1f}%
-            CONTEXT SOURCE: {context_source}
-            MEDICAL INFO: {medical_info} {f"SOURCES: {', '.join([source.get('source', 'Unknown') for source in rag_sources])}" if rag_sources else ""}
-            Generate a compassionate response (150-200 words) that:
-            1. Explains what this condition is in simple terms
-            2. Relates it to their specific symptoms mentioned
-            3. Discusses treatment options based on the retrieved information
-            4. Advises next steps (see doctor within X timeframe)
-            5. Offers to answer any questions they have
-            6. If sources are available, cite ONLY the exact document names listed in the SOURCES section above - never add any other source, organization, or publication not listed there, even a well-known one
-            7. If no SOURCES section is present above, this information comes from general medical knowledge - say so explicitly, and do NOT name any specific organization, clinic, or publication (e.g. Mayo Clinic, CDC, WHO) as a source, since none was actually retrieved
-            Be warm, reassuring, but medically responsible. Include actual source names only if a SOURCES section was provided above - never invent one.
-            """
+    sources = f"SOURCES: {', '.join(source.get('source', 'Unknown') for source in rag_sources)}" if rag_sources else ""
+    return load_prompt("chat_analysis").format(
+        prediction=primary_info.get("full_name", prediction_class_name),
+        confidence=f"{confidence:.1f}",
+        context_source=context_source,
+        medical_info=medical_info,
+        sources=sources,
+    )
