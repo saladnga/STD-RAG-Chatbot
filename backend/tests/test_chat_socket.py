@@ -18,17 +18,17 @@ def client(monkeypatch):
     async def fake_settings(user_id):
         return None, None  # no personal OpenAI key
 
-    async def fake_session(user_id, session_id, token):
+    async def fake_session(user_id, session_id):
         return {"id": "session-1"}
 
-    async def fake_history(session_id):
+    async def fake_history(user_id, session_id):
         return []
 
     async def do_nothing(*args, **kwargs):
         return None
 
-    def no_database():
-        raise RuntimeError("no database in tests")
+    async def no_profile(user_id):
+        return None
 
     monkeypatch.setattr(chat, "verify_user_token", fake_verify)
     monkeypatch.setattr(chat, "get_user_openai_settings", fake_settings)
@@ -36,7 +36,7 @@ def client(monkeypatch):
     monkeypatch.setattr(chat, "load_chat_history", fake_history)
     monkeypatch.setattr(chat, "save_message", do_nothing)
     monkeypatch.setattr(chat, "update_session_title", do_nothing)
-    monkeypatch.setattr(chat, "get_supabase_client", no_database)
+    monkeypatch.setattr(chat, "get_profile", no_profile)
     monkeypatch.setattr(main.app.state, "model", None, raising=False)
     monkeypatch.setattr(main.app.state, "label_encoder", None, raising=False)
     return TestClient(main.app)

@@ -1,13 +1,23 @@
 """
-Data access for chat sessions, messages, and token verification. Lives at the app root (not under routers/) because it's shared plumbing, not a router.
+Data access for user profiles, chat sessions, messages, and token verification. Lives at the app root (not under routers/) because it's shared plumbing, not a router.
+
+Firestore layout - each user's data lives under their own document, so one user's
+query can never reach another user's chats:
+    users/{uid}                                  profile
+    users/{uid}/sessions/{session_id}            one chat
+    users/{uid}/sessions/{session_id}/messages/  its messages
 """
 
+from datetime import datetime, timezone
+from functools import cache
 from supabase_client import get_supabase_client
 from typing import Optional, List, Dict
 import asyncio
 
 import firebase_admin
-from firebase_admin import auth as firebase_auth
+from firebase_admin import auth as firebase_auth, firestore_async
+from google.api_core.exceptions import NotFound
+from google.cloud.firestore_v1 import Query
 
 FIREBASE_PROJECT_ID = "troy-healthlink"
 # No key file: verifying a login only needs Google's public keys, which the SDK fetches and caches.
@@ -49,133 +59,96 @@ async def verify_user_token(token: str) -> Optional[Dict]:
     return await asyncio.to_thread(_verify_user_token, token)
 
 
-def _get_or_create_session_sync(
-    user_id: str, session_id: Optional[str] = None, token: Optional[str] = None
-) -> Dict:
-    # Service-role key already bypasses RLS and every query is scoped by user_id - must not mutate the shared client's session per request.
-    supabase = get_supabase_client()
-    if session_id:
-        res = (
-            supabase.table("chat_sessions")
-            .select("*")
-            .eq("id", session_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if res and res.data:
-            return res.data[0]
-    new_session = (
-        supabase.table("chat_sessions")
-        .insert({"user_id": user_id, "title": "New Health Consultation"})
-        .execute()
-    )
-
-    return new_session.data[0]
+@cache
+def _fs():
+    # Created on first use, so importing this module needs no Google credentials (tests, CI).
+    # Credentials: the troy-api service account on Cloud Run; `gcloud auth application-default login` locally.
+    return firestore_async.client()
 
 
-async def get_or_create_session(
-    user_id: str, session_id: Optional[str] = None, token: Optional[str] = None
-) -> Dict:
-    return await asyncio.to_thread(
-        _get_or_create_session_sync, user_id, session_id, token
-    )
+def _user(user_id: str):
+    return _fs().collection("users").document(user_id)
 
 
-def _load_chat_history_sync(session_id: str, limit: int = 50) -> List[Dict]:
-    supabase = get_supabase_client()
-
-    result = (
-        supabase.table("chat_messages")
-        .select("*")
-        .eq("session_id", session_id)
-        .order("created_at", desc=False)
-        .limit(limit)
-        .execute()
-    )
-
-    return result.data if result.data else []
+def _session(user_id: str, session_id: str):
+    return _user(user_id).collection("sessions").document(session_id)
 
 
-async def load_chat_history(session_id: str, limit: int = 50) -> List[Dict]:
-    return await asyncio.to_thread(_load_chat_history_sync, session_id, limit)
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-def _save_message_sync(
-    session_id: str, user_id: str, role: str, content: str, token: Optional[str] = None
-) -> Dict:
-    supabase = get_supabase_client()
+# --- Profiles ---
 
-    message = (
-        supabase.table("chat_messages")
-        .insert(
-            {
-                "session_id": session_id,
-                "user_id": user_id,
-                "role": role,
-                "content": content,
-            }
-        )
-        .execute()
-    )
-
-    return message.data[0] if message.data else None
+async def get_profile(user_id: str) -> Optional[Dict]:
+    """The raw profile, including openai_api_key - callers sending it to the browser must strip that."""
+    snap = await _user(user_id).get()
+    return {"user_id": user_id, **(snap.to_dict() or {})} if snap.exists else None
 
 
-async def save_message(
-    session_id: str, user_id: str, role: str, content: str, token: Optional[str] = None
-) -> Dict:
-    return await asyncio.to_thread(
-        _save_message_sync, session_id, user_id, role, content, token
-    )
-
-
-def _get_user_session_sync(user_id: str, limit: int = 10) -> List[Dict]:
-    supabase = get_supabase_client()
-
-    result = (
-        supabase.table("chat_sessions")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("updated_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
-
-    return result.data if result.data else []
-
-
-async def get_user_session(user_id: str, limit: int = 10) -> List[Dict]:
-    return await asyncio.to_thread(_get_user_session_sync, user_id, limit)
-
-
-def _get_user_openai_settings_sync(user_id: str) -> tuple[Optional[str], Optional[str]]:
-    # Selects only these two columns, never "*" - openai_api_key must never
-    # ride along with the rest of the profile (see auth.py's _strip_openai_key).
-    supabase = get_supabase_client()
-    res = (
-        supabase.table("user_profiles")
-        .select("openai_api_key, openai_model")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    if not res.data:
-        return None, None
-    row = res.data[0]
-    return row.get("openai_api_key") or None, row.get("openai_model") or None
+async def save_profile(user_id: str, fields: Dict) -> None:
+    """Create the profile or update just the given fields."""
+    await _user(user_id).set(fields, merge=True)
 
 
 async def get_user_openai_settings(user_id: str) -> tuple[Optional[str], Optional[str]]:
     """Returns (api_key, model) - either may be None."""
-    return await asyncio.to_thread(_get_user_openai_settings_sync, user_id)
+    profile = await get_profile(user_id) or {}
+    return profile.get("openai_api_key") or None, profile.get("openai_model") or None
 
 
-def _update_session_title_sync(session_id: str, title: str):
-    supabase = get_supabase_client()
+# --- Chat sessions and messages ---
 
-    supabase.table("chat_sessions").update({"title": title}).eq(
-        "id", session_id
-    ).execute()
+async def get_or_create_session(user_id: str, session_id: Optional[str] = None) -> Dict:
+    if session_id:
+        snap = await _session(user_id, session_id).get()
+        if snap.exists:
+            return {"id": snap.id, **(snap.to_dict() or {})}
+    ref = _user(user_id).collection("sessions").document()
+    now = _now()
+    data = {"title": "New Health Consultation", "created_at": now, "updated_at": now}
+    await ref.set(data)
+    return {"id": ref.id, **data}
 
 
-async def update_session_title(session_id: str, title: str):
-    await asyncio.to_thread(_update_session_title_sync, session_id, title)
+async def load_chat_history(user_id: str, session_id: str, limit: int = 50) -> List[Dict]:
+    query = (
+        _session(user_id, session_id).collection("messages")
+        .order_by("created_at")
+        .limit(limit)
+    )
+    return [{"id": doc.id, **(doc.to_dict() or {})} async for doc in query.stream()]
+
+
+async def save_message(session_id: str, user_id: str, role: str, content: str) -> None:
+    now = _now()
+    session = _session(user_id, session_id)
+    await session.collection("messages").add({"role": role, "content": content, "created_at": now})
+    await session.update({"updated_at": now})  # keeps the sidebar sorted by latest activity
+
+
+async def get_user_session(user_id: str, limit: int = 10) -> List[Dict]:
+    query = (
+        _user(user_id).collection("sessions")
+        .order_by("updated_at", direction=Query.DESCENDING)
+        .limit(limit)
+    )
+    return [{"id": doc.id, **(doc.to_dict() or {})} async for doc in query.stream()]
+
+
+async def update_session_title(user_id: str, session_id: str, title: str) -> bool:
+    """False if this user has no such session."""
+    try:
+        await _session(user_id, session_id).update({"title": title})
+        return True
+    except NotFound:
+        return False
+
+
+async def delete_session(user_id: str, session_id: str) -> bool:
+    """Deletes the session and all its messages. False if this user has no such session."""
+    ref = _session(user_id, session_id)
+    if not (await ref.get()).exists:
+        return False
+    await _fs().recursive_delete(ref)
+    return True

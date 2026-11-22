@@ -8,7 +8,7 @@ from supabase_auth.errors import AuthApiError
 from openai import AuthenticationError
 from llm_clients import async_client
 import os
-from db import verify_user_token, get_user_openai_settings
+from db import verify_user_token, get_user_openai_settings, get_profile as load_profile, save_profile
 from typing import Optional
 import asyncio
 from rate_limiter import limiter
@@ -82,51 +82,6 @@ def _signup_sync(request: SignupRequest):
             status_code=status.HTTP_400_BAD_REQUEST, detail="Signup failed"
         )
 
-    profile_data = {
-        "user_id": auth_res.user.id,
-        "email": request.email,
-        "first_name": request.first_name,
-        "last_name": request.last_name,
-    }
-
-    # Insert profile with service role (bypasses RLS)
-    supabase = get_supabase_client()
-    try:
-        profile_result = supabase.table("user_profiles").insert(profile_data).execute()
-
-        # Check if insert was successful
-        if not profile_result.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user profile",
-            )
-    except Exception as profile_error:
-        # If service role insert fails, try with user session context
-        if auth_res.session and auth_res.session.access_token:
-            # Create a new supabase client with user context
-            user_supabase = create_client(
-                os.getenv("VITE_SUPABASE_URL"),
-                os.getenv("VITE_SUPABASE_ANON_KEY"),  # Use anon key for user context
-            )
-            user_supabase.auth.set_session(
-                auth_res.session.access_token, auth_res.session.refresh_token
-            )
-
-            try:
-                profile_result = (
-                    user_supabase.table("user_profiles").insert(profile_data).execute()
-                )
-            except Exception as user_insert_error:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Profile creation failed: {str(user_insert_error)}",
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Profile creation failed: {str(profile_error)}",
-            )
-
     # Check if session exists (may be None if email confirmation is required)
     access_token = auth_res.session.access_token if auth_res.session else None
 
@@ -149,7 +104,12 @@ def _signup_sync(request: SignupRequest):
 @router.post("/signup")
 async def signup(request: SignupRequest):
     try:
-        return await asyncio.to_thread(_signup_sync, request)
+        result = await asyncio.to_thread(_signup_sync, request)
+        await save_profile(
+            result["user"]["id"],
+            {"email": request.email, "first_name": request.first_name, "last_name": request.last_name},
+        )
+        return result
 
     except HTTPException:
         raise  # let our own intentional 4xx responses through unchanged
@@ -186,27 +146,10 @@ def _login_sync(request: LoginRequest):
             detail="Authentication failed. Please verify your email or try again.",
         )
 
-    supabase = get_supabase_client()
-    profile_res = (
-        supabase.table("user_profiles")
-        .select("*")
-        .eq("user_id", auth_res.user.id)
-        .execute()
-    )
-    if not profile_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No profile found for this account. Please contact support.",
-        )
-    profile = profile_res.data[0]
-
     return {
         "access_token": auth_res.session.access_token,
         "user": {
             "id": auth_res.user.id,
-            "email": profile["email"],
-            "first_name": profile["first_name"],
-            "last_name": profile["last_name"],
         },
     }
 
@@ -215,7 +158,15 @@ def _login_sync(request: LoginRequest):
 @limiter.limit("5/minute")
 async def login(request: Request, login_data: LoginRequest):
     try:
-        return await asyncio.to_thread(_login_sync, login_data)
+        result = await asyncio.to_thread(_login_sync, login_data)
+        profile = await load_profile(result["user"]["id"])
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No profile found for this account. Please contact support.",
+            )
+        result["user"].update(email=profile.get("email"), first_name=profile.get("first_name"), last_name=profile.get("last_name"))
+        return result
 
     except HTTPException:
         raise  # let our own intentional 4xx responses through unchanged
@@ -294,25 +245,11 @@ def _strip_openai_key(profile: dict) -> dict:
     return profile
 
 
-def _get_profile_sync(user_id: str) -> dict:
-    supabase = get_supabase_client()
-    res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
-
-    # If Supabase client returns an error or no data, handle accordingly
-    if getattr(res, "error", None):
-        raise HTTPException(status_code=500, detail=str(res.error))
-
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Profile not found")
-
-    return _strip_openai_key(res.data[0])
-
-
 # GET current user's profile
 @router.get("/profile")
 async def get_profile(authorization: Optional[str] = Header(None)):
     """
-    Retrieve the authenticated user's profile from `user_profiles`.
+    Retrieve the authenticated user's profile.
     Requires Authorization: Bearer <token>
     """
     if not authorization:
@@ -324,33 +261,10 @@ async def get_profile(authorization: Optional[str] = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    return await asyncio.to_thread(_get_profile_sync, user["id"])
-
-
-def _update_profile_sync(user_id: str, profile_update: dict) -> dict:
-    # openai_api_key has its own dedicated, validated endpoint below - never settable through this generic passthrough.
-    profile_update.pop("openai_api_key", None)
-
-    supabase = get_supabase_client()
-    res = (
-        supabase.table("user_profiles")
-        .update(profile_update)
-        .eq("user_id", user_id)
-        .execute()
-    )
-
-    if getattr(res, "error", None):
-        raise HTTPException(status_code=500, detail=str(res.error))
-
-    # Return the updated profile (you may want to re-select to reflect DB defaults/triggers)
-    refreshed = (
-        supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
-    )
-    if getattr(refreshed, "error", None):
-        raise HTTPException(status_code=500, detail=str(refreshed.error))
-    if not refreshed.data:
+    profile = await load_profile(user["id"])
+    if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return _strip_openai_key(refreshed.data[0])
+    return _strip_openai_key(profile)
 
 
 # Optional: allow the user to update their profile (PATCH)
@@ -368,7 +282,13 @@ async def update_profile(profile_update: dict, authorization: str = Header(...))
     if not profile_update:
         raise HTTPException(status_code=400, detail="No update data provided")
 
-    return await asyncio.to_thread(_update_profile_sync, user["id"], profile_update)
+    # The key and model have their own validated endpoint below - never settable through this generic passthrough.
+    for field in ("openai_api_key", "openai_model", "user_id"):
+        profile_update.pop(field, None)
+    if not await load_profile(user["id"]):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    await save_profile(user["id"], profile_update)
+    return _strip_openai_key(await load_profile(user["id"]) or {})
 
 
 # Kept small and explicit, not any string - this becomes a real API call.
@@ -380,18 +300,6 @@ DEFAULT_CUSTOM_MODEL = "gpt-4o"
 class OpenAIKeyRequest(BaseModel):
     api_key: Optional[str] = None  # omit/empty to update the model only (see below) - use DELETE to clear
     model: Optional[str] = None  # defaults to DEFAULT_CUSTOM_MODEL when omitted
-
-
-def _set_openai_key_sync(user_id: str, api_key: Optional[str], model: Optional[str]) -> None:
-    supabase = get_supabase_client()
-    res = (
-        supabase.table("user_profiles")
-        .update({"openai_api_key": api_key, "openai_model": model})
-        .eq("user_id", user_id)
-        .execute()
-    )
-    if getattr(res, "error", None):
-        raise HTTPException(status_code=500, detail=str(res.error))
 
 
 @router.put("/openai-key")
@@ -423,7 +331,7 @@ async def set_openai_key(body: OpenAIKeyRequest, authorization: str = Header(...
             logger.warning(f"OpenAI key validation error: {e}")
             raise HTTPException(status_code=400, detail="Could not verify that API key right now. Please try again.")
 
-        await asyncio.to_thread(_set_openai_key_sync, user["id"], submitted_key, model)
+        await save_profile(user["id"], {"openai_api_key": submitted_key, "openai_model": model})
         return {"has_custom_openai_key": True, "openai_model": model}
 
     # No new key submitted - a model-only change, but only meaningful if a
@@ -434,7 +342,7 @@ async def set_openai_key(body: OpenAIKeyRequest, authorization: str = Header(...
     if body.model not in ALLOWED_CUSTOM_MODELS:
         raise HTTPException(status_code=400, detail="Unrecognized model choice.")
 
-    await asyncio.to_thread(_set_openai_key_sync, user["id"], existing_key, body.model)
+    await save_profile(user["id"], {"openai_api_key": existing_key, "openai_model": body.model})
     return {"has_custom_openai_key": True, "openai_model": body.model}
 
 
@@ -446,5 +354,5 @@ async def clear_openai_key(authorization: str = Header(...)):
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    await asyncio.to_thread(_set_openai_key_sync, user["id"], None, None)
+    await save_profile(user["id"], {"openai_api_key": None, "openai_model": None})
     return {"has_custom_openai_key": False, "openai_model": None}

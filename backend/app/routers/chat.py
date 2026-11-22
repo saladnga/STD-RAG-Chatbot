@@ -21,9 +21,9 @@ from db import (
     save_message,
     update_session_title,
     get_user_openai_settings,
+    get_profile,
 )
 from routers.auth import DEFAULT_CUSTOM_MODEL, ALLOWED_CUSTOM_MODELS
-from supabase_client import get_supabase_client
 from model import load_feature_spec
 from services.chat_analysis import (
     build_system_prompt,
@@ -87,7 +87,6 @@ async def _process_user_message(
     user_input: str,
     current_session_id: str,
     user_id: str,
-    token: str,
     messages: dict,
     model,
     label_encoder,
@@ -98,7 +97,7 @@ async def _process_user_message(
     (streamed live unless it's an ANALYZE: trigger), and - when triggered -
     the ML prediction plus a diagnosis-specific second reply."""
     # Append user message to DB and in-memory messages list
-    await save_message(current_session_id, user_id, "user", user_input, token)
+    await save_message(current_session_id, user_id, "user", user_input)
 
     # First message of a new session: title it from what the user actually asked
     if active_connections[current_session_id]["message_count"] == 0:
@@ -108,7 +107,7 @@ async def _process_user_message(
         if len(words) > title_word_limit:
             title += "…"
         if title:
-            await update_session_title(current_session_id, title)
+            await update_session_title(user_id, current_session_id, title)
 
     messages["messages"].append({"role": "user", "content": user_input})
 
@@ -212,7 +211,7 @@ async def _process_user_message(
 
     # Only save regular response if analysis won't be triggered (analysis will save its own comprehensive response)
     if not analysis_triggered:
-        await save_message(current_session_id, user_id, "assistant", ai_response, token)
+        await save_message(current_session_id, user_id, "assistant", ai_response)
 
     # Trigger analysis if GPT signal readiness
     if analysis_triggered:
@@ -311,7 +310,7 @@ async def _process_user_message(
 
         # Save AI reply with sources
         await save_message(
-            current_session_id, user_id, "assistant", final_response, token
+            current_session_id, user_id, "assistant", final_response
         )
         messages["messages"].append({"role": "assistant", "content": final_response})
     else:
@@ -371,9 +370,9 @@ async def health_chat(
 
     try:
         # Use the session_id from query parameter if provided, otherwise create new
-        session = await get_or_create_session(user_id, session_id, token)
+        session = await get_or_create_session(user_id, session_id)
         current_session_id = session["id"]
-        chat_history = await load_chat_history(current_session_id)
+        chat_history = await load_chat_history(user_id, current_session_id)
 
         # The client has no way to know a brand-new session's id otherwise - without this, refreshing a "new chat" spawns a second, orphaned session.
         await websocket.send_text(f"__SESSION__:{current_session_id}")
@@ -389,15 +388,7 @@ async def health_chat(
     # Get user profile for personalized interactions
     user_profile = None
     try:
-        supabase = get_supabase_client()
-        profile_result = await asyncio.to_thread(
-            lambda: supabase.table("user_profiles")
-            .select("*")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if profile_result.data:
-            user_profile = profile_result.data[0]
+        user_profile = await get_profile(user_id)
     except Exception as e:
         logger.warning(f"Warning: Could not load user profile: {e}")
 
@@ -453,7 +444,6 @@ async def health_chat(
                         user_input,
                         current_session_id,
                         user_id,
-                        token,
                         messages,
                         model,
                         label_encoder,
