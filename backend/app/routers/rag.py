@@ -76,7 +76,7 @@ async def upload_pdf(
     2. Extracted text from all pages (using text extraction or OCR)
     3. Chunked into overlapping segments
     4. Embedded using OpenAI embeddings
-    5. Stored in Supabase pgvector
+    5. Stored in Firestore (rag_chunks, vector search)
     
     Args:
         file: PDF file to upload
@@ -271,9 +271,9 @@ async def get_rag_stats():
     Returns information about ingested documents and chunks.
     """
     try:
-        from rag.retriever import supabase
-        
-        rows = supabase.table("document_chunks").select("source").execute().data
+        from rag.retriever import chunks_collection
+
+        rows = [doc.to_dict() or {} for doc in chunks_collection().select(["source"]).stream()]
         sources = sorted({row["source"] for row in rows})
         
         return {

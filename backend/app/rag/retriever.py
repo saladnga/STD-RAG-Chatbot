@@ -24,13 +24,25 @@ from rag.templates import (
     format_citation,
 )
 
-from supabase_client import get_supabase_client
+from functools import cache
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
+from google.cloud.firestore_v1.vector import Vector
+from db import FIREBASE_PROJECT_ID
 
 # Initialize OpenAI client
 openai_client = sync_client(os.getenv("OPENAI_API_KEY"))
 
-# Initialize Supabase (pgvector)
-supabase = get_supabase_client()
+
+@cache
+def firestore_client() -> firestore.Client:
+    # Created on first use, so importing this module needs no Google credentials (tests, CI).
+    return firestore.Client(project=FIREBASE_PROJECT_ID)
+
+
+def chunks_collection():
+    """rag_chunks/{id}: content, source, chunk_index, total_chunks, extraction_method, embedding (vector)."""
+    return firestore_client().collection("rag_chunks")
 
 # Configuration
 DEFAULT_SIMILARITY_THRESHOLD = 0.5  # Minimum similarity score (1 - distance)
@@ -101,26 +113,30 @@ def retrieve_relevant_chunks(
     retrieve_count = max(retrieve_count, max_results)
     query_embedding = create_query_embedding(query)
 
-    response = supabase.rpc(
-        "match_document_chunks",
-        {
-            "query_embedding": query_embedding,
-            "match_count": retrieve_count,
-            "similarity_threshold": similarity_threshold,
-        },
-    ).execute()
+    # Nearest first. Needs the vector index on rag_chunks.embedding (1536 dims, flat = exact search).
+    docs = chunks_collection().find_nearest(
+        vector_field="embedding",
+        query_vector=Vector(query_embedding),
+        distance_measure=DistanceMeasure.COSINE,
+        limit=retrieve_count,
+        distance_result_field="distance",
+    ).get()
 
-    # Step 2: Reshape rows into the chunk format the rest of this file expects
+    # Step 2: Reshape rows into the chunk format the rest of this file expects, dropping weak matches
     chunks = []
-    for i, row in enumerate(response.data):
-        similarity_score = row["similarity"]
+    for doc in docs:
+        row = doc.to_dict() or {}
+        similarity_score = 1.0 - row["distance"]
+        if similarity_score < similarity_threshold:
+            continue
+        i = len(chunks)
         chunks.append(
             {
                 "text": row["content"],
                 "distance": 1.0 - similarity_score,
                 "similarity_score": similarity_score,
                 "relevance_score": similarity_score,
-                "chunk_id": row["id"],
+                "chunk_id": doc.id,
                 "source": row.get("source", "Unknown"),
                 "chunk_index": row.get("chunk_index", i),
                 "total_chunks": row.get("total_chunks", 0),

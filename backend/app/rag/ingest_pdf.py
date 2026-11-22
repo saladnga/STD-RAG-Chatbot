@@ -55,9 +55,8 @@ except ImportError:
 
 # Initialize Supabase client (pgvector storage)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from supabase_client import get_supabase_client
-
-supabase = get_supabase_client()
+from google.cloud.firestore_v1.vector import Vector
+from rag.retriever import chunks_collection, firestore_client
 
 
 def extract_text_with_ocr(pdf_path: str, dpi: int = 300) -> str:
@@ -269,11 +268,14 @@ def ingest_pdf(
             "total_chunks": len(chunks),
             "extraction_method": extraction_method,
             "content": chunks[i],
-            "embedding": embeddings[i],
+            "embedding": Vector(embeddings[i]),
         }
         for i in range(len(chunks))
     ]
-    supabase.table("document_chunks").insert(rows).execute()
+    writer = firestore_client().bulk_writer()  # batches the writes, no 500-per-batch limit to handle
+    for row in rows:
+        writer.create(chunks_collection().document(), row)
+    writer.close()
 
     logger.info(f"Successfully ingested {len(chunks)} chunks into vector database")
 

@@ -4,14 +4,13 @@ import main
 import rag.retriever
 
 
-class BrokenDatabase:
+def broken_database():
     """Pretends the database crashed with a message containing secrets."""
-    def table(self, *args, **kwargs):
-        raise RuntimeError("postgres://admin:secret-password@db.internal")
+    raise RuntimeError("postgres://admin:secret-password@db.internal")
 
 
 def test_server_error_does_not_leak_internal_details(monkeypatch):
-    monkeypatch.setattr(rag.retriever, "supabase", BrokenDatabase())
+    monkeypatch.setattr(rag.retriever, "chunks_collection", broken_database)
 
     response = TestClient(main.app).get("/rag/stats")
 
