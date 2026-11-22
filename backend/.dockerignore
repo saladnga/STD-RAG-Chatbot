@@ -1,11 +1,24 @@
 .venv/
 venv/
-__pycache__/
-*.pyc
-.env
+**/__pycache__/
+**/*.pyc
+**/.DS_Store
+**/.pytest_cache/
+**/.env
 .git
 .gitignore
 *.md
-test_rag_integration.py
+**/*.md
+# ...except the prompts, which the app loads at runtime
+!app/prompts/*.md
+# Not needed to run the API
+tests/
+evals/
+test_*.py
+reingest_pdfs.py
+requirements-dev.txt
+app/synthetic_data.csv
+app/generate_*.py
+app/training_report.json
 app/data/chroma/
 app/data/pdf/

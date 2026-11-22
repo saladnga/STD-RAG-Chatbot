@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { MenuOutlined, CloseOutlined } from "@ant-design/icons";
 import logo from "../assets/logo.png";
-import { clearAuth, getToken, getUser } from "../lib/storage";
+import { clearAuth, getUser } from "../lib/storage";
 import { useNotify } from "../lib/notify";
 
 const HIDDEN_NAV_PATHS = ["/", "/login", "/signup"];
@@ -28,7 +28,7 @@ export default function Header() {
   const isHiddenNavPage = HIDDEN_NAV_PATHS.includes(location.pathname);
 
   useEffect(() => {
-    setUser(getToken() ? getUser() : null);
+    setUser(getUser());
   }, [location.pathname]);
 
   const handleLogout = () => {

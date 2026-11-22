@@ -1,0 +1,127 @@
+{
+  "recorded_at": "2026-11-22T00:09:06+00:00",
+  "git_commit": "fe8532f",
+  "chat_model": "gpt-4o-mini",
+  "judge_model": "gpt-5.4-mini-2026-03-17",
+  "runs": 3,
+  "suites": {
+    "retrieval": {
+      "hit@5": 0.72,
+      "recall@5": 0.6,
+      "mrr": 0.494,
+      "prod_hit": 0.48
+    },
+    "triage": {
+      "extraction_precision": 0.8928571428571429,
+      "extraction_recall": 0.625,
+      "extraction_f1": 0.7352941176470589,
+      "negation_errors": 0,
+      "accuracy@1": 0.4,
+      "accuracy@2": 0.65
+    },
+    "rag-llm": {
+      "faithfulness": {
+        "mean": 0.5866666666666667,
+        "min": 0.56,
+        "max": 0.64
+      },
+      "fact_coverage": {
+        "mean": 0.5155555555555555,
+        "min": 0.5,
+        "max": 0.5466666666666666
+      },
+      "invented_source_rate": {
+        "mean": 0.13333333333333333,
+        "min": 0.08,
+        "max": 0.2
+      },
+      "context_rate": {
+        "mean": 0.7866666666666667,
+        "min": 0.76,
+        "max": 0.8
+      },
+      "unverified_quote_rate": {
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "cost_per_message_usd": {
+        "mean": 0.0009999899999999999,
+        "min": 0.0009952119999999999,
+        "max": 0.0010035579999999999
+      },
+      "first_token_p50_s": {
+        "mean": 2.9793333333333334,
+        "min": 2.716,
+        "max": 3.145
+      },
+      "first_token_p95_s": {
+        "mean": 4.4682666666666675,
+        "min": 4.1160000000000005,
+        "max": 5.115400000000001
+      },
+      "total_p50_s": {
+        "mean": 4.656333333333333,
+        "min": 4.255,
+        "max": 4.965
+      },
+      "total_p95_s": {
+        "mean": 7.026466666666667,
+        "min": 6.4232000000000005,
+        "max": 7.3526
+      },
+      "llm_calls_per_message": {
+        "mean": 3,
+        "min": 3,
+        "max": 3
+      }
+    },
+    "safety-llm": {
+      "pass_rate": {
+        "mean": 0.7555555555555555,
+        "min": 0.6666666666666666,
+        "max": 0.8666666666666667
+      },
+      "urgent_referral_rate": {
+        "mean": 0.47619047619047616,
+        "min": 0.2857142857142857,
+        "max": 0.7142857142857143
+      },
+      "unsafe_count": {
+        "mean": 1.6666666666666667,
+        "min": 1,
+        "max": 2
+      },
+      "cost_per_message_usd": {
+        "mean": 0.0008721899999999999,
+        "min": 0.0008697833333333332,
+        "max": 0.0008754933333333332
+      },
+      "first_token_p50_s": {
+        "mean": 1.6706666666666667,
+        "min": 1.651,
+        "max": 1.695
+      },
+      "first_token_p95_s": {
+        "mean": 3.679466666666667,
+        "min": 3.6217,
+        "max": 3.7484
+      },
+      "total_p50_s": {
+        "mean": 2.8666666666666667,
+        "min": 2.686,
+        "max": 2.989
+      },
+      "total_p95_s": {
+        "mean": 5.298900000000001,
+        "min": 4.9322,
+        "max": 5.6568000000000005
+      },
+      "llm_calls_per_message": {
+        "mean": 3,
+        "min": 3,
+        "max": 3
+      }
+    }
+  }
+}

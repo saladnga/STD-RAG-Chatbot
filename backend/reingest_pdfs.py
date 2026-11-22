@@ -2,14 +2,15 @@
 """
 Re-upload every PDF in app/data/pdf/ to a running backend's /rag/upload.
 
-Ingestion only ever happens through that endpoint - never automatically on startup - so a fresh environment (a new Supabase project, or a Render
-service whose database was never seeded) starts with an empty knowledge base until this is run against it. Use this whenever /rag/stats shows 0 chunks/documents but app/data/pdf/ isn't empty.
+Ingestion only ever happens through that endpoint - never automatically on startup - so a fresh environment (a new Firebase project whose
+Firestore was never seeded) starts with an empty knowledge base until this is run against it. Use this whenever /rag/stats shows 0 chunks/documents but app/data/pdf/ isn't empty.
 
-/rag/upload now requires a logged-in account (see routers/rag.py), so this logs in first with real credentials, same login pattern test_chat_latency.py uses.
+/rag/upload requires a logged-in account - and when ADMIN_EMAILS is set, one whose email is on it and verified (see routers/rag.py), so this signs in with Firebase first,
+using test_chat_latency.py's login (needs FIREBASE_WEB_API_KEY in backend/app/.env).
 
 Usage:
     cd backend
-    ../.venv/bin/python reingest_pdfs.py --url https://your-app.onrender.com \\
+    ../.venv/bin/python reingest_pdfs.py --url https://your-api.run.app \\
         --email you@example.com --password '...'
 """
 
@@ -22,20 +23,7 @@ import argparse
 import urllib.request
 import urllib.error
 
-
-def login(base_url: str, email: str, password: str) -> str:
-    req = urllib.request.Request(
-        f"{base_url}/auth/login",
-        data=json.dumps({"email": email, "password": password}).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())["access_token"]
-    except urllib.error.HTTPError as e:
-        print(f"Login failed ({e.code}): {e.read().decode()}")
-        sys.exit(1)
+from test_chat_latency import firebase_login
 
 
 def upload_pdf(base_url: str, token: str, pdf_path: str) -> dict:
@@ -72,7 +60,7 @@ def main():
         description="Re-ingest every PDF in app/data/pdf/ into a running backend"
     )
     parser.add_argument(
-        "--url", required=True, help="Backend base URL, e.g. https://your-app.onrender.com"
+        "--url", required=True, help="Backend base URL, e.g. https://your-api.run.app"
     )
     parser.add_argument("--email", required=True, help="An existing account's email")
     parser.add_argument("--password", required=True, help="That account's password")
@@ -85,7 +73,7 @@ def main():
         sys.exit(1)
 
     print(f"Found {len(pdfs)} PDFs. Logging in to {args.url}...")
-    token = login(args.url, args.email, args.password)
+    token = firebase_login(args.email, args.password)
 
     failures = 0
     for pdf_path in pdfs:

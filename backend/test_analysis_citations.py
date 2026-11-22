@@ -2,7 +2,7 @@
 """
 Sanity-check script for the diagnosis pathway: runs a symptom description through the exact same ML prediction + RAG-citation logic the chatbot uses (see get_rag_context_for_diagnosis in routers/chatbot.py), and prints out the prediction plus every source it would actually have available - so you can eyeball whether the prediction looks reasonable and every citation is real, without digging through live chat logs.
 
-Requires a trained model (backend/app/model.joblib) and, for the RAG check, real Supabase/OpenAI credentials in backend/app/.env (same as the app itself).
+Requires a trained model (backend/app/model.joblib) and, for the RAG check, real OpenAI credentials in backend/app/.env and Google credentials for Firestore (same as the app itself).
 
 Usage:
     cd backend

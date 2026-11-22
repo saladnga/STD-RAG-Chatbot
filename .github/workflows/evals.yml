@@ -1,0 +1,43 @@
+name: LLM evals
+
+# Costs a few cents per run and gives slightly different scores each time, so it is run by
+# hand (Actions tab -> LLM evals -> Run workflow): before a release, and after any change to
+# prompts, models or retrieval. The deterministic triage gate runs on every PR inside CI.
+on:
+  workflow_dispatch:
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # lets GitHub prove its identity to Google - no key file stored anywhere
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      # Retrieval reads the live Firestore chunks, so the job needs Google credentials.
+      # Needs Workload Identity Federation set up in Google Cloud and these two repo secrets.
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Retrieval
+        run: python -m evals.run_retrieval
+      - name: LLM-judged answers and safety
+        run: python -m evals.run_llm
+      - name: Upload scores and answers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: backend/evals/results/
+      - name: Gate against evals/thresholds.json
+        run: python -m evals.gate retrieval rag-llm safety-llm

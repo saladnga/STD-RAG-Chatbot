@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-// Shared shell for Login/Signup/ForgotPassword/ResetPassword
+// Shared shell for Login/Signup/ForgotPassword
 export default function AuthLayout({
   title,
   children,

@@ -5,7 +5,7 @@ pydantic==2.12.3
 email-validator==2.3.0
 python-dotenv==1.2.1
 
-supabase==2.24.0
+firebase-admin==7.8.0
 
 openai==2.6.1
 pypdf==6.6.0
@@ -14,5 +14,7 @@ joblib==1.5.2
 pandas==2.3.3
 numpy==2.3.4
 scikit-learn==1.7.2
-xgboost==3.1.1
+# CPU-only build on Linux (Docker, CI): drops ~600 MB of unused GPU libraries
+xgboost==3.1.1; sys_platform != "linux"
+xgboost-cpu==3.1.1; sys_platform == "linux"
 slowapi==0.1.10

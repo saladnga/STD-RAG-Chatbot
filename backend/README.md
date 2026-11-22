@@ -26,7 +26,6 @@ backend/app/
 ├── knowledge_base.py       # STD_KNOWLEDGE dictionary
 ├── auth_utils.py           # Authentication utilities
 ├── generate_data.py        # Synthetic data generation
-├── supabase_client.py      # Supabase client
 │
 ├── model.joblib            # Trained model (artifact)
 ├── feature_spec.json       # Feature specification

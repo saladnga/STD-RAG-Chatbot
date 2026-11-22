@@ -2,7 +2,8 @@
 """
 WebSocket chat latency benchmark - measures the actual product surface (the real-time streaming chat a user experiences), not just /predict or /rag/ask.
 
-Requires a dedicated benchmark test account (see TODO.md Part 1) with BENCHMARK_TEST_EMAIL / BENCHMARK_TEST_PASSWORD set in backend/app/.env.
+Requires a dedicated benchmark test account (see TODO.md Part 1) with BENCHMARK_TEST_EMAIL / BENCHMARK_TEST_PASSWORD set in backend/app/.env,
+plus FIREBASE_WEB_API_KEY (the same value as VITE_FIREBASE_API_KEY in frontend/.env).
 
 Usage:
     cd backend
@@ -36,8 +37,29 @@ SAMPLE_MESSAGES = [
 ]
 
 
-def login(base_url: str) -> str:
-    """Log in with the dedicated benchmark account and return an access token."""
+def firebase_login(email: str, password: str) -> str:
+    """Sign in with Firebase directly (the same request the browser makes) and return an ID token the backend accepts."""
+    api_key = os.getenv("FIREBASE_WEB_API_KEY")
+    if not api_key:
+        print("Missing FIREBASE_WEB_API_KEY in backend/app/.env (same value as VITE_FIREBASE_API_KEY in frontend/.env)")
+        sys.exit(1)
+
+    req = urllib.request.Request(
+        f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}",
+        data=json.dumps({"email": email, "password": password, "returnSecureToken": True}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())["idToken"]
+    except urllib.error.HTTPError as e:
+        print(f"Login failed ({e.code}): {e.read().decode()}")
+        sys.exit(1)
+
+
+def login() -> str:
+    """Log in with the dedicated benchmark account and return an ID token."""
     email = os.getenv("BENCHMARK_TEST_EMAIL")
     password = os.getenv("BENCHMARK_TEST_PASSWORD")
     if not email or not password:
@@ -45,19 +67,7 @@ def login(base_url: str) -> str:
             "Missing BENCHMARK_TEST_EMAIL / BENCHMARK_TEST_PASSWORD in backend/app/.env"
         )
         sys.exit(1)
-
-    req = urllib.request.Request(
-        f"{base_url}/auth/login",
-        data=json.dumps({"email": email, "password": password}).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read())["access_token"]
-    except urllib.error.HTTPError as e:
-        print(f"Login failed ({e.code}): {e.read().decode()}")
-        sys.exit(1)
+    return firebase_login(email, password)
 
 
 
@@ -112,7 +122,7 @@ def main():
     print(f"Target: {args.url}   Exchanges: {args.n}")
     print("=" * 64)
 
-    token = login(args.url)
+    token = login()
     asyncio.run(benchmark(ws_url, token, args.n))
 
     print("\n" + "=" * 64)

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { authRequest } from "../lib/api";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
+import { startSession } from "../lib/api";
+import { auth, authErrorMessage } from "../lib/firebase";
 import AuthLayout from "../components/AuthLayout";
 import FormField from "../components/FormField";
 import FormError from "../components/FormError";
@@ -30,19 +32,12 @@ function Signup() {
     }
 
     try {
-      const { ok, data } = await authRequest("/auth/signup", {
-        email,
-        password,
-        first_name: firstName,
-        last_name: lastName,
-      });
-      if (ok) {
-        navigate("/chat");
-      } else {
-        setError(data.detail || "Signup failed");
-      }
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      void sendEmailVerification(user); // not required to log in; only admin emails need it
+      await startSession(user.uid, { email, first_name: firstName, last_name: lastName });
+      navigate("/chat");
     } catch (err) {
-      setError("Connection error: " + err);
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }

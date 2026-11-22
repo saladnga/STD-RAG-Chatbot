@@ -1,1 +1,3 @@
 .env
+# Eval run output (baseline.json is committed separately in S19)
+evals/results/

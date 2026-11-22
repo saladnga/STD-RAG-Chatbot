@@ -7,10 +7,7 @@ def _route_paths():
 def test_app_imports_and_registers_routes():
     paths = _route_paths()
     for expected in [
-        "/auth/signup",
-        "/auth/login",
-        "/auth/forgot-password",
-        "/auth/reset-password",
+        "/auth/profile",
         "/predict",
         "/ws/chat",
     ]:
