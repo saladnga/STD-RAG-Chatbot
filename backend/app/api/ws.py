@@ -1,21 +1,19 @@
 """
-The live chat WebSocket endpoint. Orchestrates: auth, session load/create, streaming a GPT reply (RAG-grounded when relevant), and - when the model signals it has enough information - running the ML prediction and a second, diagnosis-specific reply. The actual logic for each step lives in services/chat_analysis.py; session/message persistence lives in db.py.
+The live chat WebSocket endpoint. Orchestrates: auth, session load/create, streaming a GPT reply (RAG-grounded when relevant), and - when the model signals it has enough information - running the ML prediction and a second, diagnosis-specific reply. The actual logic for each step lives in chat/analysis.py; session/message persistence lives in store.py.
 """
 
-import os
 import re
 import logging
 from contextlib import asynccontextmanager
 from openai import AsyncOpenAI
-from dotenv import load_dotenv
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Query
 import asyncio
 import limits
-from llm_clients import async_client, DEFAULT_CHAT_MODEL
-from rate_limiter import limiter
+from llm import async_client, DEFAULT_CHAT_MODEL
+from api.deps import limiter, verify_user_token
+from config import settings
 
-from db import (
-    verify_user_token,
+from store import (
     get_or_create_session,
     load_chat_history,
     save_message,
@@ -23,9 +21,9 @@ from db import (
     get_user_openai_settings,
     get_profile,
 )
-from routers.auth import DEFAULT_CUSTOM_MODEL, ALLOWED_CUSTOM_MODELS
-from model import load_feature_spec
-from services.chat_analysis import (
+from api.profile import DEFAULT_CUSTOM_MODEL, ALLOWED_CUSTOM_MODELS
+from triage.model import load_feature_spec
+from chat.analysis import (
     build_system_prompt,
     build_rag_system_message,
     get_rag_context_for_chat,
@@ -36,8 +34,7 @@ from services.chat_analysis import (
 
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-openai_client = async_client(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = async_client(api_key=settings.openai_api_key)
 
 # Keyed by session_id while a WebSocket is open - in-memory, single-process only
 active_connections = {}

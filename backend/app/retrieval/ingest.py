@@ -5,21 +5,21 @@ Supports both text-based PDFs and scanned/image-based PDFs using OCR.
 """
 
 import os
-import sys
 import logging
 from typing import List, Dict
-from dotenv import load_dotenv
+
 import pypdf as PyPDF2
+from google.cloud.firestore_v1.vector import Vector
 
-from llm_clients import EMBEDDING_MODEL, sync_client
-
-load_dotenv()
+from config import settings
+from llm import EMBEDDING_MODEL, sync_client
+from retrieval.retriever import chunks_collection, firestore_client
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-openai_client = sync_client(os.getenv("OPENAI_API_KEY"), timeout=120.0)
+openai_client = sync_client(settings.openai_api_key, timeout=120.0)
 
 # PDF text extraction libraries
 try:
@@ -51,11 +51,6 @@ except ImportError:
     logger.warning(
         "Also install Tesseract OCR: https://github.com/tesseract-ocr/tesseract"
     )
-
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from google.cloud.firestore_v1.vector import Vector
-from rag.retriever import chunks_collection, firestore_client
 
 
 def extract_text_with_ocr(pdf_path: str, dpi: int = 300) -> str:

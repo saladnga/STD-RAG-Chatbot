@@ -5,7 +5,7 @@ Re-upload every PDF in app/data/pdf/ to a running backend's /rag/upload.
 Ingestion only ever happens through that endpoint - never automatically on startup - so a fresh environment (a new Firebase project whose
 Firestore was never seeded) starts with an empty knowledge base until this is run against it. Use this whenever /rag/stats shows 0 chunks/documents but app/data/pdf/ isn't empty.
 
-/rag/upload requires a logged-in account - and when ADMIN_EMAILS is set, one whose email is on it and verified (see routers/rag.py), so this signs in with Firebase first,
+/rag/upload requires a logged-in account - and when ADMIN_EMAILS is set, one whose email is on it and verified (see app/api/rag.py), so this signs in with Firebase first,
 using test_chat_latency.py's login (needs FIREBASE_WEB_API_KEY in backend/app/.env).
 
 Usage:

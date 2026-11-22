@@ -3,8 +3,9 @@ import logging
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from openai import AuthenticationError
-from llm_clients import async_client
-from db import verify_user_token, get_user_openai_settings, get_profile as load_profile, save_profile
+from llm import async_client
+from api.deps import verify_user_token
+from store import get_user_openai_settings, get_profile as load_profile, save_profile
 from typing import Optional
 
 logger = logging.getLogger(__name__)

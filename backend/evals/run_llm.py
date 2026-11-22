@@ -13,7 +13,6 @@ RAG lookup and citation instructions, the same model and temperature.
 
 import asyncio
 import json
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -25,15 +24,16 @@ from evals.metrics import percentile
 from evals.schema import APP_DIR, EVALS_DIR, load_cases
 
 sys.path.insert(0, str(APP_DIR))
-from llm_clients import DEFAULT_CHAT_MODEL, sync_client  # noqa: E402
-from rag import retriever  # noqa: E402
-from services.chat_analysis import (  # noqa: E402
+from config import settings  # noqa: E402
+from llm import DEFAULT_CHAT_MODEL, sync_client  # noqa: E402
+from retrieval import retriever  # noqa: E402
+from chat.analysis import (  # noqa: E402
     build_rag_system_message,
     build_system_prompt,
     get_rag_context_for_chat,
 )
 
-CHAT_TEMPERATURE = 0.7  # same as routers/chat.py
+CHAT_TEMPERATURE = 0.7  # same as app/api/ws.py
 RESULTS_DIR = EVALS_DIR / "results"
 
 
@@ -193,7 +193,7 @@ def run_suite(client, suite: str) -> dict:
 
 
 def main():
-    client = sync_client(os.getenv("OPENAI_API_KEY"))
+    client = sync_client(settings.openai_api_key)
     for suite in sys.argv[1:] or ["rag", "safety"]:
         run_suite(client, suite)
 

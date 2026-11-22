@@ -1,4 +1,4 @@
-from services.chat_analysis import build_system_prompt
+from chat.analysis import build_system_prompt
 
 
 def test_prompt_without_profile_does_not_crash():

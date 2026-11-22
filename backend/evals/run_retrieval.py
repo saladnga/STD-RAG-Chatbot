@@ -19,11 +19,11 @@ from evals.metrics import hit_at_k, recall_at_k, reciprocal_rank
 from evals.schema import APP_DIR, EVALS_DIR, load_cases
 
 sys.path.insert(0, str(APP_DIR))
-from llm_clients import EMBEDDING_MODEL  # noqa: E402
-from rag import retriever  # noqa: E402
+from llm import EMBEDDING_MODEL  # noqa: E402
+from retrieval import retriever  # noqa: E402
 
 K = 5
-# What chat actually uses (services/chat_analysis.get_rag_context_for_chat): top 3 chunks
+# What chat actually uses (chat/analysis.get_rag_context_for_chat): top 3 chunks
 # with similarity >= 0.5. Measured separately so threshold changes show their real effect.
 PROD_TOP_K = 3
 PROD_THRESHOLD = retriever.DEFAULT_SIMILARITY_THRESHOLD

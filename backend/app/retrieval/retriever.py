@@ -2,21 +2,18 @@
 Retriever for RAG with vector retrieval, optional cross-encoder reranking, and similarity gating.
 """
 
-import os
-import sys
-from typing import List, Dict, Tuple, Optional
-from llm_clients import sync_client, DEFAULT_CHAT_MODEL, EMBEDDING_MODEL
-from dotenv import load_dotenv
 import logging
+from functools import cache
+from typing import List, Dict, Tuple, Optional
 
-load_dotenv()
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
+from google.cloud.firestore_v1.vector import Vector
 
-# Set up logging
-logger = logging.getLogger(__name__)
-
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rag.templates import (
+from config import settings
+from llm import sync_client, DEFAULT_CHAT_MODEL, EMBEDDING_MODEL
+from retrieval.templates import (
+    extract_citations_from_text,
     format_rag_prompt,
     get_system_prompt,
     is_no_answer_response,
@@ -24,25 +21,22 @@ from rag.templates import (
     format_citation,
 )
 
-from functools import cache
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
-from google.cloud.firestore_v1.vector import Vector
-from db import FIREBASE_PROJECT_ID
+logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-openai_client = sync_client(os.getenv("OPENAI_API_KEY"))
+openai_client = sync_client(settings.openai_api_key)
 
 
 @cache
 def firestore_client() -> firestore.Client:
     # Created on first use, so importing this module needs no Google credentials (tests, CI).
-    return firestore.Client(project=FIREBASE_PROJECT_ID)
+    return firestore.Client(project=settings.firebase_project_id)
 
 
 def chunks_collection():
     """rag_chunks/{id}: content, source, chunk_index, total_chunks, extraction_method, embedding (vector)."""
     return firestore_client().collection("rag_chunks")
+
 
 # Configuration
 DEFAULT_SIMILARITY_THRESHOLD = 0.5  # Minimum similarity score (1 - distance)
@@ -68,9 +62,7 @@ def get_cross_encoder_model():
         try:
             # Use a medical/healthcare-focused model if available, otherwise use a general one
             # ms-marco-MiniLM-L-6-v2 is a good general-purpose reranker
-            model_name = os.getenv(
-                "CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
-            )
+            model_name = settings.cross_encoder_model
             _cross_encoder_model = CrossEncoder(model_name)
             logger.info(f"Loaded cross-encoder model: {model_name}")
         except Exception as e:
@@ -317,8 +309,6 @@ def extract_citations_from_answer(answer: str, chunks: List[Dict]) -> List[Dict]
     Returns:
     - List of citation dictionaries
     """
-    from rag.templates import extract_citations_from_text
-
     # Use template function for citation extraction
     extracted_citations = extract_citations_from_text(answer)
 

@@ -1,181 +1,50 @@
 # Troy HealthLink Backend
 
-Backend API for STD symptom prediction and health assistance using ML and RAG.
+FastAPI server for the chat, RAG and symptom-triage model. Runs as a Docker image on Cloud Run.
 
-## Project Structure
+## Layout
 
 ```
-backend/app/
-├── routers/
-│   ├── __init__.py
-│   ├── predict.py          # /predict, /followup endpoints
-│   └── rag.py              # /rag/upload, /rag/ask endpoints
-│
-├── rag/
-│   ├── __init__.py
-│   ├── ingest_pdf.py       # PDF parsing, chunking, embedding
-│   ├── retriever.py        # Document retrieval and answer generation
-│   └── templates.py        # RAG prompt templates
-│
-├── data/
-│   ├── pdf/                # Upload medical PDFs here
-│   └── chroma/             # ChromaDB persistence (auto-created)
-│
-├── model.py                # Training + inference utilities
-├── main.py                 # FastAPI app bootstrap
-├── knowledge_base.py       # STD_KNOWLEDGE dictionary
-├── auth_utils.py           # Authentication utilities
-├── generate_data.py        # Synthetic data generation
-│
-├── model.joblib            # Trained model (artifact)
-├── feature_spec.json       # Feature specification
-├── label_encoder.json      # Class mappings
-├── training_report.json    # Training metrics
-├── symptom_map.json        # Symptom text → feature mapping (used by model.py's phrase matching)
-├── question_bank.json      # Follow-up questions per disease-pair
-└── synthetic_data.csv      # Training dataset
+backend/
+├── app/                    # everything the server runs (the Docker image copies only this)
+│   ├── main.py             # creates the app, mounts the routes, loads the model at startup
+│   ├── config.py           # every setting, typed (pydantic-settings), from env vars or app/.env
+│   ├── llm.py              # OpenAI clients with one timeout and retry policy
+│   ├── store.py            # the one place that reads and writes Firestore (profiles, chats, messages)
+│   ├── api/
+│   │   ├── deps.py         # Firebase login check, admin check, rate limits
+│   │   ├── ws.py           # the chat WebSocket (/ws/chat)
+│   │   ├── sessions.py     # list, rename, delete chats; chat history
+│   │   ├── profile.py      # profile and the user's own OpenAI key
+│   │   └── rag.py          # PDF upload, /rag/ask, /rag/stats
+│   ├── chat/analysis.py    # system prompt, RAG context, ML call, analysis prompt
+│   ├── retrieval/          # Firestore vector search (retriever), PDF ingestion, prompt templates
+│   ├── triage/             # XGBoost model, symptom extraction, EIG, knowledge base, model files
+│   ├── prompts/            # every prompt as a .md file
+│   └── data/pdf/           # the source PDFs
+├── scripts/                # offline tools: generate training data, feature spec, label encoder
+├── evals/                  # retrieval, triage and LLM-judged evals with a baseline and thresholds
+├── tests/                  # pytest, run in CI and before every deploy
+└── test_*.py               # manual benchmarks against a running server (need real credentials)
 ```
 
-## Setup
+## Run locally
 
-1. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+cd backend
+pip install -r requirements-dev.txt
+cp app/.env.example app/.env          # fill in OPENAI_API_KEY at least
+gcloud auth application-default login # Firestore credentials
+cd app && uvicorn main:app --reload
+```
 
-2. **Set up environment variables:**
-   Create a `.env` file with:
-   ```
-   OPENAI_API_KEY=your_openai_api_key
-   JWT_SECRET=your_jwt_secret
-   ```
+Tests: `cd backend && python -m pytest tests/`. The real-Firestore test runs only when Google credentials are available.
 
-3. **Train the model:**
-   ```bash
-   python model.py
-   ```
-   This will:
-   - Load `synthetic_data.csv`
-   - Train XGBoost model
-   - Save `model.joblib`, `feature_spec.json`, `label_encoder.json`, `training_report.json`
+## Train the model
 
-4. **Run the server:**
-   ```bash
-   python main.py
-   ```
-   Or using uvicorn:
-   ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
+```bash
+cd backend/app
+python triage/model.py
+```
 
-## API Endpoints
-
-### Prediction Endpoints
-
-- **POST /predict**
-  - Accepts symptom text
-  - Returns prediction, probabilities, and detected symptoms
-  ```json
-  {
-    "text": "it burns when i pee and i have a bad odor"
-  }
-  ```
-
-- **POST /predict/followup**
-  - Processes follow-up symptom information
-  - Updates probabilities based on new information
-  ```json
-  {
-    "text": "the discharge is thin and yellow",
-    "previous_prediction": "Chlamydia",
-    "previous_probabilities": {"Chlamydia": 0.7, "Gonorrhea": 0.2, ...}
-  }
-  ```
-
-### RAG Endpoints
-
-- **POST /rag/upload**
-  - Upload medical PDF documents
-  - PDFs are parsed, chunked, embedded, and stored
-
-- **POST /rag/ask**
-  - Ask questions using RAG
-  - Retrieves relevant context from uploaded documents
-  ```json
-  {
-    "question": "What are the treatment options for chlamydia?",
-    "max_results": 5
-  }
-  ```
-
-## Model Training
-
-The model uses XGBoost with optimized hyperparameters:
-
-- **Objective**: multi:softprob
-- **Max Depth**: 6
-- **Learning Rate**: 0.05
-- **N Estimators**: 500 (with early stopping)
-- **Regularization**: L1 (0.1) + L2 (1.0)
-- **Class Weights**: Balanced (handles class imbalance)
-
-Training saves:
-- `model.joblib`: Trained model, label encoder, feature columns
-- `feature_spec.json`: Ordered feature list
-- `label_encoder.json`: Class ↔ index mappings
-- `training_report.json`: Training metrics and hyperparameters
-
-## RAG (Retrieval-Augmented Generation)
-
-The RAG system allows you to:
-
-1. **Upload PDFs**: Medical documents are processed and stored in ChromaDB
-2. **Ask Questions**: Questions are answered using retrieved context from uploaded documents
-3. **No Hallucination**: Strict prompt templates ensure answers only use provided context
-
-### RAG Workflow
-
-1. Upload PDF → `rag/ingest_pdf.py`
-   - Extract text
-   - Chunk text (1000 chars, 200 overlap)
-   - Create embeddings (OpenAI ada-002)
-   - Store in ChromaDB
-
-2. Ask Question → `rag/retriever.py`
-   - Create query embedding
-   - Retrieve relevant chunks
-   - Generate answer with context
-   - Return answer + sources
-
-## Development
-
-### Adding New Symptoms
-
-1. Add the new phrase → feature mapping to `symptom_map.json`
-2. Retrain the model
-
-### Adding New Diseases
-
-1. Update `knowledge_base.py` with disease information
-2. Update `question_bank.json` with follow-up questions
-3. Regenerate training data if needed
-4. Retrain the model
-
-## Requirements
-
-See `requirements.txt` for full list. Key dependencies:
-
-- `fastapi`: Web framework
-- `xgboost`: ML model
-- `scikit-learn`: ML utilities
-- `spacy`, `medspacy`: NLP
-- `chromadb`: Vector database
-- `openai`: Embeddings and LLM
-- `pypdf` or `PyPDF2`: PDF processing
-
-## Notes
-
-- Model must be trained before using prediction endpoints
-- RAG requires uploaded PDFs before asking questions
-- ChromaDB data persists in `data/chroma/`
-
+Reads `triage/synthetic_data.csv` (made by `scripts/generate_data.py`) and writes `model.joblib`, `feature_spec.json`, `label_encoder.json` and `training_report.json` into `triage/`.

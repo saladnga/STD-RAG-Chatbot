@@ -16,7 +16,6 @@ cost also depend on network and OpenAI load, so they get 20% headroom on top.
 """
 
 import json
-import os
 import subprocess
 from datetime import datetime, timezone
 from statistics import mean
@@ -82,7 +81,7 @@ def main():
         "retrieval": run_retrieval.main()["summary"],
         "triage": run_triage.main()["summary"],
     }
-    client = run_llm.sync_client(os.getenv("OPENAI_API_KEY"))
+    client = run_llm.sync_client(run_llm.settings.openai_api_key)
     for suite in ["rag", "safety"]:
         runs = [run_llm.run_suite(client, suite)["summary"] for _ in range(RUNS)]
         suites[f"{suite}-llm"] = spread(runs)

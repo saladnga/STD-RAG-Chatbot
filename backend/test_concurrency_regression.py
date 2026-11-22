@@ -79,7 +79,7 @@ async def ask_about_condition(ws_url: str, token: str, message: str) -> str:
     Open a fresh connection and hold a short two-turn conversation.
 
     One message alone isn't enough: the system prompt (see
-    build_system_prompt in chat_analysis.py) tells the model to ask
+    build_system_prompt in chat/analysis.py) tells the model to ask
     clarifying questions until IT decides it has enough info before
     signalling "ANALYZE:" - that's an LLM judgment call, not a code branch,
     so a single message can't reliably reach the diagnosis path. A second

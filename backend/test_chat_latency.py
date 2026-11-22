@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WebSocket chat latency benchmark - measures the actual product surface (the real-time streaming chat a user experiences), not just /predict or /rag/ask.
+WebSocket chat latency benchmark - measures the actual product surface (the real-time streaming chat a user experiences), not just /rag/ask.
 
 Requires a dedicated benchmark test account (see TODO.md Part 1) with BENCHMARK_TEST_EMAIL / BENCHMARK_TEST_PASSWORD set in backend/app/.env,
 plus FIREBASE_WEB_API_KEY (the same value as VITE_FIREBASE_API_KEY in frontend/.env).
