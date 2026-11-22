@@ -6,14 +6,35 @@ from supabase_client import get_supabase_client
 from typing import Optional, List, Dict
 import asyncio
 
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+
+FIREBASE_PROJECT_ID = "troy-healthlink"
+# No key file: verifying a login only needs Google's public keys, which the SDK fetches and caches.
+firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID})
+
+
+def _verify_firebase_token(token: str) -> Optional[Dict]:
+    try:
+        claims = firebase_auth.verify_id_token(token)
+    except Exception:
+        return None  # not a (valid) Firebase token
+    # Anyone can sign up with any address, so an unverified email must not count -
+    # otherwise a stranger could register an ADMIN_EMAILS address and pass the admin check.
+    email = claims.get("email") if claims.get("email_verified") else None
+    return {"id": claims["uid"], "email": email}
+
 
 def _verify_user_token(token: str) -> Optional[Dict]:
     if not token:
         return None
+    # Supabase fallback until every user is on Firebase; delete it with Supabase.
+    user = _verify_firebase_token(token)
+    if user:
+        return user
     try:
         supabase = get_supabase_client()
-        # Validates this token directly - must NOT use set_session, which
-        # would mutate the shared client's identity for every other request.
+        # Validates this token directly - must NOT use set_session, which would mutate the shared client's identity for every other request.
         user_res = supabase.auth.get_user(token)
 
         if user_res and user_res.user:
@@ -31,8 +52,7 @@ async def verify_user_token(token: str) -> Optional[Dict]:
 def _get_or_create_session_sync(
     user_id: str, session_id: Optional[str] = None, token: Optional[str] = None
 ) -> Dict:
-    # Service-role key already bypasses RLS and every query is scoped by
-    # user_id - must not mutate the shared client's session per request.
+    # Service-role key already bypasses RLS and every query is scoped by user_id - must not mutate the shared client's session per request.
     supabase = get_supabase_client()
     if session_id:
         res = (
