@@ -7,6 +7,7 @@ from openai import AsyncOpenAI, OpenAI
 TIMEOUT_S = 30.0 # max silence from OpenAI (between stream chunks), not total reply time
 MAX_RETRIES = 2  # SDK retries connection errors, 429 and 5xx with backoff; never 401/400
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
+EMBEDDING_MODEL = "text-embedding-ada-002"  # changing it means re-embedding every stored chunk
 
 
 def async_client(api_key: str | None, timeout: float = TIMEOUT_S, max_retries: int = MAX_RETRIES) -> AsyncOpenAI:

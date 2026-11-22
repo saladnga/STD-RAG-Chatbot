@@ -11,7 +11,7 @@ from typing import List, Dict
 from dotenv import load_dotenv
 import pypdf as PyPDF2
 
-from llm_clients import sync_client
+from llm_clients import EMBEDDING_MODEL, sync_client
 
 load_dotenv()
 
@@ -198,7 +198,7 @@ def chunk_text(
 def create_embeddings(texts: List[str]) -> List[List[float]]:
     """Create embeddings for texts using OpenAI."""
     response = openai_client.embeddings.create(
-        model="text-embedding-ada-002", input=texts
+        model=EMBEDDING_MODEL, input=texts
     )
     return [item.embedding for item in response.data]
 

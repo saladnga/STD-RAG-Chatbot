@@ -5,7 +5,7 @@ Retriever for RAG with vector retrieval, optional cross-encoder reranking, and s
 import os
 import sys
 from typing import List, Dict, Tuple, Optional
-from llm_clients import sync_client, DEFAULT_CHAT_MODEL
+from llm_clients import sync_client, DEFAULT_CHAT_MODEL, EMBEDDING_MODEL
 from dotenv import load_dotenv
 import logging
 
@@ -72,7 +72,7 @@ def get_cross_encoder_model():
 def create_query_embedding(query: str) -> List[float]:
     """Create embedding for a query using OpenAI."""
     response = openai_client.embeddings.create(
-        model="text-embedding-ada-002", input=query
+        model=EMBEDDING_MODEL, input=query
     )
     return response.data[0].embedding
 
