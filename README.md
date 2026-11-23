@@ -74,6 +74,8 @@ docker run -p 8000:8000 --env-file app/.env troy-healthlink-backend
 
 `backend/app/.env.example` and `frontend/.env.example` are the source of truth for required environment variables.
 
+**Deploys:** a push to `dev` deploys the backend to Cloud Run service `troy-api-dev` (used by local and Vercel preview builds); a merge to `main` deploys `troy-api`, which the live site uses. Each deploy is a new Cloud Run revision, so a bad deploy is rolled back in Cloud Run → Manage traffic by sending all traffic to the previous revision.
+
 ## Performance
 
 Measured locally with `backend/test_performance.py` (methodology in the script — re-run against the deployed instance before quoting these anywhere):
