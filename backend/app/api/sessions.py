@@ -1,10 +1,11 @@
 """
-REST endpoints for managing chat sessions: list, fetch history, rename, delete. Separate from routers/chat.py (the WebSocket itself) since these are plain request/response endpoints with nothing streaming or stateful.
+REST endpoints for managing chat sessions: list, fetch history, rename, delete. Separate from api/ws.py (the WebSocket itself) since these are plain request/response endpoints with nothing streaming or stateful.
 """
 
 from fastapi import APIRouter, HTTPException, Header
 
-from db import verify_user_token, load_chat_history, get_user_session, update_session_title, delete_session as delete_session_data
+from api.deps import verify_user_token
+from store import load_chat_history, get_user_session, update_session_title, delete_session as delete_session_data
 import logging
 
 logger = logging.getLogger(__name__)

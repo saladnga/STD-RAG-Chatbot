@@ -20,7 +20,7 @@ from evals.metrics import precision_recall_f1
 from evals.schema import APP_DIR, EVALS_DIR, known_symptoms, load_cases
 
 sys.path.insert(0, str(APP_DIR))
-from model import load_model, process_text_to_feature  # noqa: E402
+from triage.model import load_model, process_text_to_feature  # noqa: E402
 
 RESULTS_PATH = EVALS_DIR / "results" / "triage-latest.json"
 
@@ -28,7 +28,7 @@ RESULTS_PATH = EVALS_DIR / "results" / "triage-latest.json"
 def main():
     model, label_encoder, feature_columns = load_model()
     if model is None or label_encoder is None:
-        raise SystemExit("app/model.joblib could not be loaded; train it first: cd backend/app && python model.py")
+        raise SystemExit("app/triage/model.joblib could not be loaded; train it first: cd backend/app && python triage/model.py")
     symptoms = known_symptoms()
 
     rows = []

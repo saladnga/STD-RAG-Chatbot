@@ -1,20 +1,17 @@
 """
 Chat business logic: the system prompt, RAG lookups (for regular chat and for a confirmed diagnosis), the ML prediction call, and the analysis prompt.
-Kept separate from routers/chat.py so the WebSocket handler only has to orchestrate these steps, not implement them.
+Kept separate from api/ws.py so the WebSocket handler only has to orchestrate these steps, not implement them.
 """
 
-import sys
-import os
 import asyncio
 import logging
 from typing import Optional, Dict, Tuple
 
 import pandas as pd
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from knowledge_base import STD_KNOWLEDGE
-from rag.retriever import retrieve_and_answer
-from model import process_text_to_feature
+from triage.knowledge_base import STD_KNOWLEDGE
+from retrieval.retriever import retrieve_and_answer
+from triage.model import process_text_to_feature
 from prompts import load as load_prompt
 
 logger = logging.getLogger(__name__)

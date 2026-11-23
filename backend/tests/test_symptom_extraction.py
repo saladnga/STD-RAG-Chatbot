@@ -1,10 +1,10 @@
 import json
 import os
 
-from model import process_text_to_feature
+from triage.model import process_text_to_feature
 
 FEATURE_SPEC_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "app", "feature_spec.json"
+    os.path.dirname(__file__), "..", "app", "triage", "feature_spec.json"
 )
 
 with open(FEATURE_SPEC_PATH) as f:

@@ -2,16 +2,16 @@
 """
 Performance benchmark for Troy HealthLink - prints real, measured numbers from your own running system, so anything you quote on a resume is a number you actually produced, not an estimate.
 
-Measures three things:
+Measures two things:
 1. Raw XGBoost inference speed - no network, just the model itself.
-2. End-to-end /predict API latency - the real round trip a user experiences.
-3. RAG retrieval latency (/rag/ask) - sequential and concurrent.
+2. RAG retrieval latency (/rag/ask), sequential.
+For the chat a user actually experiences, use test_chat_latency.py.
 
 Usage:
     cd backend
     ../.venv/bin/python test_performance.py                      # local server on :8000
-    ../.venv/bin/python test_performance.py --url https://your-app.onrender.com
-    ../.venv/bin/python test_performance.py --n 50 --concurrency 20
+    ../.venv/bin/python test_performance.py --url https://your-api.run.app
+    ../.venv/bin/python test_performance.py --n 50
 """
 
 import sys
@@ -21,7 +21,6 @@ import json
 import argparse
 import statistics
 import urllib.request
-import concurrent.futures
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "app"))
 
@@ -59,7 +58,7 @@ def _stats(label: str, times_ms: list, failures: int, total: int):
 
 def benchmark_model_inference(n: int):
     """Raw model.predict_proba speed - no network, no server needed."""
-    from model import load_model, process_text_to_feature
+    from triage.model import load_model, process_text_to_feature
 
     model, label_encoder, feature_columns = load_model()
     if model is None:
@@ -116,24 +115,10 @@ def benchmark_endpoint_sequential(url: str, payloads: list, label: str):
     return times_ms
 
 
-def benchmark_endpoint_concurrent(url: str, payloads: list, label: str, concurrency: int):
-    start_all = time.perf_counter()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as pool:
-        results = list(pool.map(lambda p: _timed_post(url, p), payloads))
-    total_elapsed = time.perf_counter() - start_all
-
-    times_ms = [t for t, ok in results if ok]
-    failures = sum(1 for _, ok in results if not ok)
-    _stats(label, times_ms, failures, len(payloads))
-    if total_elapsed > 0:
-        print(f"Throughput: {len(payloads) / total_elapsed:.1f} requests/sec at concurrency={concurrency}")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Troy HealthLink performance benchmark")
     parser.add_argument("--url", default="http://127.0.0.1:8000", help="Backend base URL")
     parser.add_argument("--n", type=int, default=30, help="Requests per benchmark")
-    parser.add_argument("--concurrency", type=int, default=10, help="Concurrent workers for the load test")
     parser.add_argument("--skip-model", action="store_true", help="Skip the direct model-inference benchmark")
     args = parser.parse_args()
 
@@ -144,19 +129,6 @@ def main():
 
     if not args.skip_model:
         benchmark_model_inference(args.n)
-
-    predict_payloads = [
-        {"text": SAMPLE_SYMPTOMS[i % len(SAMPLE_SYMPTOMS)]} for i in range(args.n)
-    ]
-    benchmark_endpoint_sequential(
-        f"{args.url}/predict", predict_payloads, "POST /predict (sequential, end-to-end)"
-    )
-    benchmark_endpoint_concurrent(
-        f"{args.url}/predict",
-        predict_payloads,
-        f"POST /predict (concurrent x{args.concurrency})",
-        args.concurrency,
-    )
 
     rag_payloads = [
         {"question": SAMPLE_RAG_QUESTIONS[i % len(SAMPLE_RAG_QUESTIONS)], "max_results": 5}

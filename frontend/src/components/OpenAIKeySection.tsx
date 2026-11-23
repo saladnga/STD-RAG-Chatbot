@@ -3,7 +3,7 @@ import { Select } from "antd";
 import { setOpenaiKey, clearOpenaiKey } from "../lib/api";
 import { useNotify } from "../lib/notify";
 
-// Kept in sync with ALLOWED_CUSTOM_MODELS in backend/app/routers/auth.py.
+// Kept in sync with ALLOWED_CUSTOM_MODELS in backend/app/api/profile.py.
 const MODEL_OPTIONS = [
   { value: "gpt-4o", label: "GPT-4o (recommended)" },
   { value: "gpt-4o-mini", label: "GPT-4o mini (fastest, cheapest)" },

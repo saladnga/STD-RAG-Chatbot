@@ -3,29 +3,21 @@ FastAPI application bootstrap.
 Main entry point that includes all routers.
 """
 
-import os
-import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import logging
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from rate_limiter import limiter
-
-# Load environment variables
-load_dotenv()
+from api.deps import limiter
+from config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Add project root to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 # Import routers
-from routers import predict, rag, auth, chat, sessions
-from model import load_model
+from api import profile, rag, sessions, ws
+from triage.model import load_model
 
 
 # Initialize model and NLP on startup
@@ -48,7 +40,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not load model: {e}")
         logger.warning("Prediction is unavailable until model.joblib exists.")
-        logger.warning("Train it offline: cd backend/app && python model.py")
+        logger.warning("Train it offline: cd backend/app && python triage/model.py")
         # Set None values to prevent AttributeError
         app.state.model = None
         app.state.nlp = None
@@ -78,21 +70,18 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]  # slowapi's handler is narrower than Starlette's type; safe at runtime
 
 # Add CORS middleware
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-
 app.add_middleware(
     CORSMiddleware,  # Configure appropriately for production
-    allow_origins=allowed_origins,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(auth.router)
-app.include_router(predict.router)
+app.include_router(profile.router)
 app.include_router(rag.router)
-app.include_router(chat.router)
+app.include_router(ws.router)
 app.include_router(sessions.router)
 
 
@@ -104,8 +93,6 @@ async def root():
         "message": "Troy HealthLink API is running!",
         "version": "1.0.0",
         "endpoints": {
-            "predict": "/predict",
-            "followup": "/predict/followup",
             "rag_upload": "/rag/upload",
             "rag_ask": "/rag/ask",
             "rag_stats": "/rag/stats",

@@ -8,7 +8,6 @@ def test_app_imports_and_registers_routes():
     paths = _route_paths()
     for expected in [
         "/auth/profile",
-        "/predict",
         "/ws/chat",
     ]:
         assert expected in paths, f"missing route: {expected}"

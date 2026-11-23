@@ -3,7 +3,6 @@ RAG (Retrieval-Augmented Generation) router.
 Provides endpoints for uploading PDFs and asking questions with RAG.
 """
 import os
-import sys
 import hashlib
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Depends
 from pydantic import BaseModel
@@ -11,11 +10,9 @@ from typing import List, Optional, Dict, Any
 import logging
 import asyncio
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rag.ingest_pdf import ingest_pdf
-from rag.retriever import retrieve_and_answer
-from auth_utils import ALLOW_UNAUTHENTICATED_RAG_UPLOAD, ADMIN_EMAILS, require_admin_auth, require_user
-from rate_limiter import enforce
+from retrieval.ingest import ingest_pdf
+from retrieval.retriever import retrieve_and_answer
+from api.deps import ALLOW_UNAUTHENTICATED_RAG_UPLOAD, ADMIN_EMAILS, enforce, require_admin_auth, require_user
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -271,7 +268,7 @@ async def get_rag_stats():
     Returns information about ingested documents and chunks.
     """
     try:
-        from rag.retriever import chunks_collection
+        from retrieval.retriever import chunks_collection
 
         rows = [doc.to_dict() or {} for doc in chunks_collection().select(["source"]).stream()]
         sources = sorted({row["source"] for row in rows})

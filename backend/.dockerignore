@@ -17,8 +17,7 @@ evals/
 test_*.py
 reingest_pdfs.py
 requirements-dev.txt
-app/synthetic_data.csv
-app/generate_*.py
-app/training_report.json
+app/triage/synthetic_data.csv
+app/triage/training_report.json
 app/data/chroma/
 app/data/pdf/

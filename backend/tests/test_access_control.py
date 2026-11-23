@@ -2,17 +2,13 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 import main
-from rate_limiter import client_ip
+from api.deps import client_ip
 
 client = TestClient(main.app)
 
 
 def test_rag_ask_requires_login():
     assert client.post("/rag/ask", json={"question": "hi"}).status_code == 401
-
-
-def test_predict_requires_login():
-    assert client.post("/predict", json={"text": "itching"}).status_code == 401
 
 
 def _request(headers):

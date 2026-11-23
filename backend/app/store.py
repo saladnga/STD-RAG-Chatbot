@@ -1,5 +1,5 @@
 """
-Data access for user profiles, chat sessions, messages, and token verification. Lives at the app root (not under routers/) because it's shared plumbing, not a router.
+The one place that reads and writes Firestore: user profiles, chat sessions and messages.
 
 Firestore layout - each user's data lives under their own document, so one user's
 query can never reach another user's chats:
@@ -11,33 +11,16 @@ query can never reach another user's chats:
 from datetime import datetime, timezone
 from functools import cache
 from typing import Optional, List, Dict
-import asyncio
 
 import firebase_admin
-from firebase_admin import auth as firebase_auth, firestore_async
+from firebase_admin import firestore_async
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import Query
 
-FIREBASE_PROJECT_ID = "troy-healthlink"
-# No key file: verifying a login only needs Google's public keys, which the SDK fetches and caches.
-firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID})
+from config import settings
 
-
-def _verify_user_token(token: str) -> Optional[Dict]:
-    if not token:
-        return None
-    try:
-        claims = firebase_auth.verify_id_token(token)
-    except Exception:
-        return None  # not a (valid) Firebase token
-    # Anyone can sign up with any address, so an unverified email must not count -
-    # otherwise a stranger could register an ADMIN_EMAILS address and pass the admin check.
-    email = claims.get("email") if claims.get("email_verified") else None
-    return {"id": claims["uid"], "email": email}
-
-
-async def verify_user_token(token: str) -> Optional[Dict]:
-    return await asyncio.to_thread(_verify_user_token, token)
+# No key file: Cloud Run uses its service account, local runs use `gcloud auth application-default login`.
+firebase_admin.initialize_app(options={"projectId": settings.firebase_project_id})
 
 
 @cache

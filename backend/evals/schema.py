@@ -81,9 +81,9 @@ def load_cases(suite: str) -> list:
 
 
 def known_conditions() -> set[str]:
-    return set(json.loads((APP_DIR / "label_encoder.json").read_text())["classes"])
+    return set(json.loads((APP_DIR / "triage" / "label_encoder.json").read_text())["classes"])
 
 
 def known_symptoms() -> set[str]:
-    features = json.loads((APP_DIR / "feature_spec.json").read_text())["features"]
+    features = json.loads((APP_DIR / "triage" / "feature_spec.json").read_text())["features"]
     return set(features) - NON_SYMPTOM_FEATURES

@@ -1,4 +1,4 @@
-# Runs on every push to dev (Cloud Build trigger). Steps run in order; if one fails, the rest are skipped, so failing tests never reach Cloud Run.
+# Two Cloud Build triggers run this: push to dev deploys troy-api-dev; push to main deploys troy-api (the live site), with the trigger setting _SERVICE_NAME=troy-api. Steps run in order; if one fails, the rest are skipped, so failing tests never reach Cloud Run.
 steps:
   - id: test
     name: python:3.12-slim

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Sanity-check script for the diagnosis pathway: runs a symptom description through the exact same ML prediction + RAG-citation logic the chatbot uses (see get_rag_context_for_diagnosis in routers/chatbot.py), and prints out the prediction plus every source it would actually have available - so you can eyeball whether the prediction looks reasonable and every citation is real, without digging through live chat logs.
+Sanity-check script for the diagnosis pathway: runs a symptom description through the exact same ML prediction + RAG-citation logic the chatbot uses (see get_rag_context_for_diagnosis in chat/analysis.py), and prints out the prediction plus every source it would actually have available - so you can eyeball whether the prediction looks reasonable and every citation is real, without digging through live chat logs.
 
-Requires a trained model (backend/app/model.joblib) and, for the RAG check, real OpenAI credentials in backend/app/.env and Google credentials for Firestore (same as the app itself).
+Requires a trained model (backend/app/triage/model.joblib) and, for the RAG check, real OpenAI credentials in backend/app/.env and Google credentials for Firestore (same as the app itself).
 
 Usage:
     cd backend
@@ -18,9 +18,9 @@ import asyncio
 sys.path.append(os.path.join(os.path.dirname(__file__), "app"))
 
 import pandas as pd
-from model import load_model, process_text_to_feature
-from knowledge_base import STD_KNOWLEDGE
-from rag.retriever import retrieve_and_answer
+from triage.model import load_model, process_text_to_feature
+from triage.knowledge_base import STD_KNOWLEDGE
+from retrieval.retriever import retrieve_and_answer
 
 PDF_DIR = os.path.join(os.path.dirname(__file__), "app", "data", "pdf")
 REAL_PDF_NAMES = {os.path.basename(p) for p in glob.glob(os.path.join(PDF_DIR, "*.pdf"))}
@@ -32,7 +32,7 @@ async def check_symptoms(symptom_text: str):
         print("No trained model found - train one first (POST /train), then rerun this.")
         return
 
-    # --- Same prediction logic as run_ml_prediction() in chatbot.py ---
+    # --- Same prediction logic as run_ml_prediction() in chat/analysis.py ---
     feature_dict = process_text_to_feature(symptom_text, feature_columns)
     feature_df = pd.DataFrame([feature_dict], columns=feature_columns)
     probs = model.predict_proba(feature_df)[0]

@@ -25,9 +25,9 @@ except ImportError:
 
 def generate_label_encoder():
     """Generate label_encoder.json from model.joblib or from known classes."""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "triage")  # where the model files live
     model_path = os.path.join(current_dir, "model.joblib")
-    csv_path = os.path.join(os.path.dirname(current_dir), "synthetic_data.csv")
+    csv_path = os.path.join(current_dir, "synthetic_data.csv")
     label_encoder_path = os.path.join(current_dir, "label_encoder.json")
 
     classes = None

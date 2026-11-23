@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 import main
-import routers.chat as chat
+import api.ws as chat
 
 SORRY = "Sorry, something went wrong on our side. Please try again."
 

@@ -12,9 +12,9 @@ import pandas as pd
 
 def generate_feature_spec():
     """Generate feature_spec.json from model.joblib or CSV."""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "triage")  # where the model files live
     model_path = os.path.join(current_dir, "model.joblib")
-    csv_path = os.path.join(os.path.dirname(current_dir), "synthetic_data.csv")
+    csv_path = os.path.join(current_dir, "synthetic_data.csv")
     feature_spec_path = os.path.join(current_dir, "feature_spec.json")
     
     features = None

@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 import main
-import rag.retriever
+import retrieval.retriever
 
 
 def broken_database():
@@ -10,7 +10,7 @@ def broken_database():
 
 
 def test_server_error_does_not_leak_internal_details(monkeypatch):
-    monkeypatch.setattr(rag.retriever, "chunks_collection", broken_database)
+    monkeypatch.setattr(retrieval.retriever, "chunks_collection", broken_database)
 
     response = TestClient(main.app).get("/rag/stats")
 

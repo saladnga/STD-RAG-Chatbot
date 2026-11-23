@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import random
@@ -48,8 +49,7 @@ def generate_patient_data():
     ]
 
     # --- Probability weights ---
-    weights = [0.02, 0.14, 0.11, 0.08, 0.08, 0.10, 0.06, 0.05, 0.04,
-               0.05, 0.04, 0.05, 0.04, 0.03, 0.02, 0.02]
+    weights = [0.02, 0.14, 0.11, 0.08, 0.08, 0.10, 0.06, 0.05, 0.04, 0.05, 0.04, 0.05, 0.04, 0.03, 0.02, 0.02]
 
     ground_truth = random.choices(conditions, weights, k=1)[0]
     patient["ground_truth"] = ground_truth
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     # Encode condom_use_consistency
     df = pd.get_dummies(df, columns=["condom_use_consistency"], drop_first=True)
 
-    output_filename = "synthetic_data.csv"
+    output_filename = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "triage", "synthetic_data.csv")
     df.to_csv(output_filename, index=False)
 
     print(f"\nSuccessfully generated {num_patients} samples to '{output_filename}'")
